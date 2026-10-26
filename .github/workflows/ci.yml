@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      # Includes the safety-boundary and public-build tests (test/release.test.mjs).
+      - run: node --test
+
+  site:
+    name: Site build + model licence gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - run: node tools/check-models.mjs
+      - run: node tools/build-site.mjs _site
+
+  firmware:
+    name: Firmware compiles (${{ matrix.board }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        board: [BOARD_M5STICKC_PLUS2, BOARD_ESP32_MPU6050]
+    env:
+      ESP32_CORE: esp32:esp32@3.3.12
+      M5UNIFIED: M5Unified@0.2.27
+      SKETCH: firmware/spinesense-motion
+    steps:
+      - uses: actions/checkout@v7
+      - uses: arduino/setup-arduino-cli@v2
+        with:
+          version: 1.5.1
+      - name: Install the ESP32 core and libraries (pinned)
+        run: |
+          arduino-cli config init
+          arduino-cli config add board_manager.additional_urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli core update-index
+          arduino-cli core install "$ESP32_CORE"
+          arduino-cli lib install "$M5UNIFIED"
+      - name: Select the board variant
+        run: |
+          if [ "${{ matrix.board }}" = "BOARD_ESP32_MPU6050" ]; then
+            sed -i 's|#define BOARD_M5STICKC_PLUS2  // default board|#define BOARD_ESP32_MPU6050  // selected by CI|' "$SKETCH/spinesense-motion.ino"
+          fi
+          grep -n "#define BOARD_" "$SKETCH/spinesense-motion.ino"
+      # Generic ESP32 target for both: M5Unified detects the M5StickC Plus2 at runtime.
+      - name: Compile
+        run: arduino-cli compile --fqbn esp32:esp32:esp32 --warnings default "$SKETCH"

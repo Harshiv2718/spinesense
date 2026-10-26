@@ -1,0 +1,24 @@
+# Build output
+_site/
+node_modules/
+
+# Agent working files (ephemeral review and consensus reports)
+active/
+
+# Local tooling. .claude/skills holds third-party skill files imported from a zip: not ours to publish.
+.claude/settings.local.json
+.claude/skills/
+
+# Future ML pipeline: artifacts and landmarks derived from licence-restricted (tier B/C) data
+ml/artifacts/
+ml/data/
+
+# Training clips and raw sensor recordings contain personal movement data
+spinesense-clip-*.json
+spinesense-sensors-*.json
+spinesense-*.json
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.log

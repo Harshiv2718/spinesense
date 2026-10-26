@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- The only outside hosts this page may contact are the two that serve the MediaPipe engine and models. Video never leaves the device. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net; connect-src 'self' https://cdn.jsdelivr.net https://storage.googleapis.com; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; style-src 'self' 'unsafe-inline'; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>SpineSense</title>
+  <meta name="description" content="Webcam back-pain exercise coach: body tracking, form feedback and discomfort detection, running privately in your browser.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%232a78d6'/%3E%3Cg fill='white'%3E%3Crect x='9' y='3' width='6' height='3.4' rx='1.4'/%3E%3Crect x='8.4' y='7.6' width='7.2' height='3.4' rx='1.4'/%3E%3Crect x='8' y='12.2' width='8' height='3.6' rx='1.5'/%3E%3Crect x='8.4' y='17' width='7.2' height='3.6' rx='1.5'/%3E%3C/g%3E%3C/svg%3E">
+  <link rel="stylesheet" href="css/app.css">
+  <script>
+    try {
+      const t = JSON.parse(localStorage.getItem('spinesense.v1') || '{}').settings?.theme;
+      if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+    } catch (e) { /* storage unavailable */ }
+  </script>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <a class="brand" href="#/dashboard" aria-label="SpineSense home">
+        <span class="brand-mark" id="brand-mark"></span>
+        <span class="brand-name">SpineSense</span>
+      </a>
+      <nav class="nav" id="nav" aria-label="Main"></nav>
+      <div class="sidebar-foot">
+        <button type="button" class="theme-btn" id="theme-btn"></button>
+        <p class="disclaimer">An exercise companion, not a diagnosis. Video stays on this device.</p>
+      </div>
+    </aside>
+    <main id="view" class="main" tabindex="-1"></main>
+  </div>
+  <div id="modal-root"></div>
+  <div id="toast-root" aria-live="polite"></div>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

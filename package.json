@@ -1,0 +1,14 @@
+{
+  "name": "spinesense",
+  "version": "0.1.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "description": "Webcam back-pain exercise coach: body tracking, form feedback and discomfort detection, all in the browser.",
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test",
+    "build": "node tools/build-site.mjs _site",
+    "check:models": "node tools/check-models.mjs"
+  }
+}
