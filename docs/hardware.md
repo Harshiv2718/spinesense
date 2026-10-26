@@ -2,7 +2,7 @@
 
 A small motion sensor strapped to your back gives SpineSense accurate lower-back angles, which a webcam can't measure well. One sensor gives trunk angle; two give the true lower-back (lumbar) angle, using the same dual-inclinometer method clinicians use.
 
-> Status: the firmware is written against the documented ESP32 and M5Unified APIs but **has not yet been tested on real hardware**. The browser side is fully tested with simulated sensors that send identical packets.
+> Status: the firmware **compiles in CI for both boards** (ESP32 core 3.3.12, M5Unified 0.2.27, arduino-cli 1.5.1), but **has not yet run on real hardware**. The browser side is fully tested with simulated sensors that send identical packets. If you flash a board, the first thing to check is that the Sensors page shows a steady ~50 Hz stream for 10 minutes.
 
 ## Pick your parts
 

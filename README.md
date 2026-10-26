@@ -101,6 +101,7 @@ Video is processed on-device and never stored or uploaded. The page downloads th
 - Floor exercises need the camera low and side-on. Tracking is less reliable when lying down.
 - The grimace score has not been validated for pain. It is one signal among several, and the voice and movement signals carry most of the weight.
 - Thresholds are tuned on simulated movement. Expect to adjust sensitivity in Settings after trying it yourself.
+- The back-sensor firmware compiles in CI for both boards but has not yet run on real hardware.
 
 ## Licence
 

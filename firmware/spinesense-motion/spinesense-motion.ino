@@ -9,7 +9,7 @@
 // For M5StickC Plus2 also install the "M5Unified" library and select the board "M5StickCPlus2"
 // (or "ESP32 PICO-D4"). Protocol: docs/sensor-protocol.md
 //
-// Status: written against the documented APIs but not yet tested on hardware.
+// Status: compiles in CI for both boards (.github/workflows/ci.yml); not yet run on real hardware.
 
 // ----------------------------------------------------------------- choose your board
 // Change the default below, or pass -DBOARD_ESP32_MPU6050 when compiling. CI builds both.

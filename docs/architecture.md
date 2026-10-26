@@ -16,7 +16,7 @@ The target pipeline for SpineSense: what runs where, how data flows, how models 
 ┌─ BROWSER (runtime, ~30 Hz) ──────────────────────────────────────────────────────────────────────┐
 │  1 CAPTURE      Webcam ─► MediaPipe Pose (33 pts) + Face (52 blendshapes)                [Built] │
 │                 BLE back sensors ─► SensorHub (upper/lower IMU, 50 Hz)                   [Built] │
-│                 ESP32 sensor firmware that streams the packets                      [Unverified] │
+│                 ESP32 sensor firmware (compiles in CI, not yet run on hardware)     [Unverified] │
 │                 User input: safety check, pain 0–10, leg symptoms, next-day              [Built] │
 │  2 SIGNAL       One-Euro smoothing · visibility & tracking gates · sensor freshness      [Built] │
 │                 Camera-to-IMU time alignment (frame-callback time, clock fit)             [Next] │
@@ -51,7 +51,7 @@ The target pipeline for SpineSense: what runs where, how data flows, how models 
 | # | Stage | Module | Status | Borrowed from |
 |---|---|---|---|---|
 | 1 | Pose + face capture | `js/vision/tracker.js` | Built | MediaPipe |
-| 1 | Back sensors over Web Bluetooth | `js/sensors/{ble,hub}.js`, `firmware/` | Built (browser, simulator-tested) / **Unverified** (firmware) | SlimeVR-Tracker-ESP |
+| 1 | Back sensors over Web Bluetooth | `js/sensors/{ble,hub}.js`, `firmware/` | Built (browser, simulator-tested) / **Unverified** (firmware: compiles in CI, not yet run on hardware) | SlimeVR-Tracker-ESP |
 | 2 | Smoothing and gating | `js/core/filters.js`, engine gates | Built | One-Euro; **Sports2D/Pose2Sim** filtering options |
 | 2 | Camera-to-IMU time alignment | `tracker.js`, `hub.js` | Next | — |
 | 3 | Calibration | engine baseline, `discomfort.js`, `sensors/posture.js` | Built | Clinical dual-inclinometer method |
@@ -119,7 +119,7 @@ Tier A is thin: its Kinect sets are skeleton-only and none covers hip hinge, bri
 
 ## 7. Hardware pipeline
 
-- **Status: Unverified.** The firmware (one sketch, two boards: M5StickC Plus2; ESP32 + MPU6050) says in its header and in `docs/hardware.md` that it has not been tested on hardware; no CI has compiled it; its hand-rolled Madgwick filter has never been compared with a proven one. Phase 1 exit criterion: both boards compile in CI, and one board streams 10 minutes into the app with no sequence-number gaps.
+- **Status: Unverified.** The firmware (one sketch, two boards: M5StickC Plus2; ESP32 + MPU6050) **compiles in CI for both boards** (first green run 2026-10-26, ESP32 core 3.3.12, M5Unified 0.2.27), but has not been run on hardware, and its hand-rolled Madgwick filter has never been compared with a proven one. Phase 1 exit criterion: both boards compile in CI (**met**), and one board streams 10 minutes into the app with no sequence-number gaps (open).
 - **CI** (Next): a `firmware` matrix over both boards, pinning one `esp32:esp32` core and one `M5Unified`. The sketch hard-codes `#define BOARD_M5STICKC_PLUS2` (line 15), so guard it with `#if !defined(...)` and pass `-DBOARD_ESP32_MPU6050` through `--build-property` on the second leg; confirm each FQBN with `arduino-cli board listall`. Attach `.bin` files to tagged releases (the SlimeVR-Tracker-ESP pattern). A green build proves compilation only.
 - **Protocol:** the version sits in the packet header (bits 4–7) and is decoded, but unknown versions are **not rejected yet (Next)**. Add `proto=1` to the Info string; `BleSensor.connect()` reads Info first and, if `proto` is missing or above `PROTOCOL_VERSION`, shows "This sensor needs a newer SpineSense" and does not subscribe.
 
@@ -134,7 +134,7 @@ spinesense/
 │   └── views/                     # incl. diagnostics.js (tracking panel + copyable test report)
 ├── server.mjs                     # dev server (the camera needs localhost or HTTPS)
 ├── models/, ml/, tools/           # *.onnx + manifest; Python pipeline; check-models.mjs, build-site.mjs (Next)
-├── firmware/spinesense-motion/    # ESP32 firmware (Unverified)
+├── firmware/spinesense-motion/    # ESP32 firmware (compiles in CI; not yet run on hardware)
 ├── test/                          # node --test (37 tests today)
 ├── docs/                          # architecture, hardware, sensor-protocol, platform-brainstorm;
 │                                  #   validation, hazards, data-handling (Next)
