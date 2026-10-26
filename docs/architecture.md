@@ -19,7 +19,7 @@ The target pipeline for SpineSense: what runs where, how data flows, how models 
 │                 ESP32 sensor firmware (compiles in CI, not yet run on hardware)     [Unverified] │
 │                 User input: safety check, pain 0–10, leg symptoms, next-day              [Built] │
 │  2 SIGNAL       One-Euro smoothing · visibility & tracking gates · sensor freshness      [Built] │
-│                 Camera-to-IMU time alignment (frame-callback time, clock fit)             [Next] │
+│                 Camera-to-IMU time alignment (frame-callback time, clock fit)            [Built] │
 │  3 CALIBRATION  Start-position baseline · neutral + effort face · 3-step sensor cal.     [Built] │
 │  4 FEATURES     Joint & segment angles · trunk/pelvis/lumbar (dual inclinometer) ·               │
 │                 rep tempo, hold steadiness · range, asymmetry                            [Built] │
@@ -29,20 +29,20 @@ The target pipeline for SpineSense: what runs where, how data flows, how models 
 │                 Models (advise only): movement-quality score, form-error cues             [Next] │
 │  6 DECISION     SAFETY GATES (final authority) ─► coaching policy ─► plan, progression   [Built] │
 │  7 EXPERIENCE   Dashboard · session HUD · voice coach · reports                          [Built] │
-│  8 LOCAL DATA   localStorage · export/import · training-clip recorder (landmarks + sensor        │
-│                 angles, no video; no consent flow yet)                                   [Built] │
-│                 IndexedDB clip library · consent records · clip schema v1                 [Next] │
+│  8 LOCAL DATA   localStorage · export/import                                             [Built] │
+│                 clip schema v1 (raw landmarks + raw sensor packets, no video) · consent  [Built] │
+│                 records · IndexedDB clip library (Recordings page)                               │
 └────────│─────────────────────────────────────────────────────────────────────────────────────────┘
-         │ clips (user-exported; consented once the consent flow exists)
+         │ clips (consented, user-exported)
 ┌────────▼─ OFFLINE ML PIPELINE (Python, ml/) ──────────────────────────────────────────── [Next] ─┐
 │ public RGB datasets ─► re-extract MediaPipe (pinned) ──┐                                         │
 │ own clips ─► raw browser landmarks (pre-filter) ───────┴─► same One-Euro filter ─► normalise     │
 │ ─► windows ─► train (rules baseline → trees → 1D-CNN if trees plateau) ─► leave-one-subject-out  │
 │ eval ─► fp32 ONNX ─► model card ─► licence-checked manifest ─► shadow mode in app ─► promote     │
 └──────────────────────────────────────────────────────────────────────────────────────────────────┘
-┌─ VALIDATION PIPELINE ─────────────────────────────────────────────────────────────────── [Next] ─┐
-│ time alignment ─► validate the reference (jig, re-fusion) ─► camera vs back sensor (MAE, ICC,    │
-│ Bland–Altman) per exercise ─► cheap third reference (Kinovea) ─► docs/validation.md              │
+┌─ VALIDATION PIPELINE ───────────────────────────────── [Built, simulated data; real clips Next] ─┐
+│ time alignment ─► validate the reference (bench card; re-fusion Next) ─► camera vs back sensor   │
+│ (MAE, ICC, Bland–Altman) per exercise ─► cheap third reference (Kinovea, Next) ─► validation.md  │
 └──────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -53,7 +53,7 @@ The target pipeline for SpineSense: what runs where, how data flows, how models 
 | 1 | Pose + face capture | `js/vision/tracker.js` | Built | MediaPipe |
 | 1 | Back sensors over Web Bluetooth | `js/sensors/{ble,hub}.js`, `firmware/` | Built (browser, simulator-tested) / **Unverified** (firmware: compiles in CI, not yet run on hardware) | SlimeVR-Tracker-ESP |
 | 2 | Smoothing and gating | `js/core/filters.js`, engine gates | Built | One-Euro; **Sports2D/Pose2Sim** filtering options |
-| 2 | Camera-to-IMU time alignment | `tracker.js`, `hub.js` | Next | — |
+| 2 | Camera-to-IMU time alignment | `js/sensors/timesync.js`, `tracker.js`, `hub.js` | Built (simulator-tested) | Lower-envelope clock fit (as in NTP-style one-way sync); cross-correlation |
 | 3 | Calibration | engine baseline, `discomfort.js`, `sensors/posture.js` | Built | Clinical dual-inclinometer method |
 | 4 | Angle features | `js/core/geometry.js` | Built | **Sports2D** segment angles, plane-of-motion warnings |
 | 4 | Velocity and jerk features | `js/core/features.js` | Next | — |
@@ -99,12 +99,12 @@ Tier A is thin: its Kinect sets are skeleton-only and none covers hip hinge, bri
 
 ## 5. Validation pipeline
 
-1. **Time alignment** (Next; prerequisite for every camera-vs-sensor number). Today `hub.js` stamps packets on arrival, `tracker.js` stamps frames after inference, and the device clock goes unused; with tens of ms of BLE jitter and 50–100 ms capture-to-detect latency, a 100 ms offset at 30°/s is a 3° label error. Take camera time from `requestVideoFrameCallback`; fit `rx = a + b·device_ms` per clip from the `device_ms` and `rx_s` that `hub.startRecording()` already stores; open every clip with three slow forward bends and cross-correlate camera trunk tilt with sensor flexion over ±300 ms; store `sync:{offsetMs, corr}`, drop clips with corr < 0.9, and report the median residual.
-2. **Validate the reference first.** Bench-test a sensor on a rigid jig with a protractor at 0/15/30/45/60/90° (flexion and side-bend, three repeats): mean absolute error and 10-minute drift. Replay raw `hub.startRecording()` logs through `imufusion` (Fusion) and `vqf`; replace the hand-rolled Madgwick (beta 0.08) only if one beats it by a margin set in advance. Define the label as "lumbar flexion relative to the standing-neutral calibration, in degrees", not absolute lordosis. Copy mobgap's report layout.
-3. **Camera vs sensor:** per exercise, camera trunk angle vs upper sensor, and camera hip-hinge pattern vs sensor lumbar angle. Compare **change from each person's calibration pose**, not absolute angle, and use side-on views for sagittal metrics. Report n, ICC(2,1) absolute agreement, MAE and Bland–Altman limits with bootstrap intervals over subjects (pyCompare), always beside the sensor's own error.
+1. **Time alignment** (Built, simulator-tested; prerequisite for every camera-vs-sensor number). With tens of ms of BLE jitter and 50–100 ms capture-to-detect latency, a 100 ms offset at 30°/s is a 3° label error. Camera time comes from `requestVideoFrameCallback` (`captureTime`). `js/sensors/timesync.js` fits `local = a + b·device_ms` through the per-chunk minimum arrival delay (a lower-envelope fit that removes radio jitter and crystal drift, and handles the 32-bit wrap); in tests it recovers sample times within 4 ms despite up to 140 ms of jitter. `js/analysis/agreement.js` then cross-correlates the unfiltered camera trunk tilt with sensor inclination (±0.5 s) for the remaining constant offset, and reports the One-Euro smoothing delay separately. Still Next: drop clips with corr < 0.9 and report the median residual on real clips.
+2. **Validate the reference first.** (Bench card Built on the Sensors page: 0/30/45/60/90°, 2 s still captures, `js/analysis/bench.js`; drift test, side-bend axis, repeats and re-fusion Next.) Bench-test a sensor on a rigid jig with a protractor at 0/15/30/45/60/90° (flexion and side-bend, three repeats): mean absolute error and 10-minute drift. Replay raw `hub.startRecording()` logs through `imufusion` (Fusion) and `vqf`; replace the hand-rolled Madgwick (beta 0.08) only if one beats it by a margin set in advance. Define the label as "lumbar flexion relative to the standing-neutral calibration, in degrees", not absolute lordosis. Copy mobgap's report layout.
+3. **Camera vs sensor:** per exercise, camera trunk angle vs upper sensor, and camera hip-hinge pattern vs sensor lumbar angle. Compare **change from each person's calibration pose**, not absolute angle, and use side-on views for sagittal metrics. Report n, ICC(2,1) absolute agreement, MAE and Bland–Altman limits with bootstrap intervals over subjects (pyCompare), always beside the sensor's own error. (Built: `analyzeClip()` computes bias, limits, MAE, RMSE, r, Lin's CCC and ICC(A,1) per exercise from rep peaks and frames, and hides the ICC when reps barely vary; `tools/validate-clips.mjs` writes `docs/validation.md` and its SVG plots. Bootstrap intervals over subjects: Next, once there are subjects.)
 4. **Cheap third reference:** Kinovea manual angles on a side-view clip, or a phone IMU on the sternum. Optional later: two cameras synced by a clap, processed offline with Pose2Sim (its README claims 2–6° joint-angle error against marker capture for limb joints; unchecked here and not a lumbar figure).
 5. **Rules vs models:** the same held-out clips are scored by both; a model ships only if it beats the rules.
-6. Publish everything in `docs/validation.md`. A results page with real numbers is what makes a portfolio project credible.
+6. Publish everything in `docs/validation.md` (Built, currently simulated results only). A results page with real numbers is what makes a portfolio project credible.
 
 ## 6. Data architecture (local-first)
 
@@ -112,10 +112,10 @@ Tier A is thin: its Kinect sets are skeleton-only and none covers hip hinge, bri
 |---|---|---|
 | `spinesense.v1` | Profile, safety check, progress, sessions, settings | **Stays in localStorage** (Built): seven modules use the synchronous `store`, and `index.html` reads the theme before first paint. Next: `migrate(state)` keyed on `version` in `load()` and `importJSON()` (neither checks it today; reject newer versions), and a toast when `setItem` fails (today only `console.warn`) |
 | `spinesense.sensorcal` | Per-sensor calibration, 12-hour expiry | localStorage (Built) |
-| Training clips | `clip.v1`: `{schema, consent:{version, at, scope[]}, participant:<random UUID>, env:{app, tasksVision, poseModelSha256, variant, delegate, camera:{w,h,fps}, ua}, sensors:[{role, fw, board, rate, calId}], sync:{offsetMs, corr, method}, frames:[{tCapture, lm33_raw, world33_raw, sensorRaw?}]}` | Downloaded JSON (Built, pre-v1: no consent record, no environment metadata, a silent 18,000-frame cap, pain `results` included) → IndexedDB library via a ~60-line `js/clips.js` with `navigator.storage.persist()` (Next). Only clips move: a 10-minute clip is ~10–15 MB |
+| Training clips | `clip.v1`: `{schema, consent:{version, at, scope[]}, participant:<random UUID>, env:{app, tasksVision, poseModelSha256, variant, delegate, camera:{w,h,fps}, ua}, sensors:[{role, fw, board, rate, calId}], sync:{offsetMs, corr, method}, frames:[{tCapture, lm33_raw, world33_raw, sensorRaw?}]}` | IndexedDB library, `js/data/{clip,clipstore}.js` (Built): `clip.v1` with a consent record, capture metadata (MediaPipe version, model, delegate, video size), raw and world landmarks as typed arrays, raw sensor packets with device and arrival times, events and results; 10-minute cap; quota errors fall back to download. Still Next: participant UUID, `navigator.storage.persist()`, and keeping pain answers out of clips meant for sharing. A 10-minute clip at 30 fps is about 15–20 MB as JSON |
 | Models | ONNX files + manifest | Static files with the app (Next) |
 
-**Clip consent flow** (Next; before the first clip and on any schema change). A plain-language screen says what is stored (33 landmarks at 30 Hz, sensor angles, exercise, time; no video), that movement traces can still identify a person, who sees them, retention (12 months) and how to withdraw. Three separate boxes: record on this device; share for research; allow anonymised open release (default off). Names, screening answers and pain ratings never enter a clip. The library offers Export and Delete; with no server, participants send exports to a private channel, and `docs/data-handling.md` states retention. Only pain-free volunteers, or people with back pain doing correct-form reps under a physio, may record; publishing results about people with back pain needs an ethics review through a university or clinic partner.
+**Clip consent flow** (Built for on-device recording: `js/views/consent.js`, versioned, asked the first time recording is switched on, withdrawable on the Recordings page, which deletes every clip. The research-sharing and open-release boxes are Next, because nothing is shared yet.) Before the first clip and on any schema change: A plain-language screen says what is stored (33 landmarks at 30 Hz, sensor angles, exercise, time; no video), that movement traces can still identify a person, who sees them, retention (12 months) and how to withdraw. Three separate boxes: record on this device; share for research; allow anonymised open release (default off). Names, screening answers and pain ratings never enter a clip. The library offers Export and Delete; with no server, participants send exports to a private channel, and `docs/data-handling.md` states retention. Only pain-free volunteers, or people with back pain doing correct-form reps under a physio, may record; publishing results about people with back pain needs an ethics review through a university or clinic partner.
 
 ## 7. Hardware pipeline
 
@@ -129,25 +129,26 @@ Tier A is thin: its Kinect sets are skeleton-only and none covers hip hinge, bri
 spinesense/
 ├── index.html, css/, js/          # the web app (static, no build step)
 │   ├── app.js, store.js, program.js, ui.js, charts.js, figures.js
-│   ├── core/ sensors/ vision/ coach/   # logic (features.js: Next), BLE + hub, MediaPipe, voice
+│   ├── core/ sensors/ vision/ coach/   # logic (features.js: Next), BLE + hub + timesync, MediaPipe, voice
+│   ├── data/ analysis/            # clip.v1 recorder + IndexedDB library; agreement stats, plots, bench, simulator
 │   ├── ml/                        # onnxruntime-web loaders, shadow-mode harness            (Next)
 │   └── views/                     # incl. diagnostics.js (tracking panel + copyable test report)
 ├── server.mjs                     # dev server (the camera needs localhost or HTTPS)
-├── models/, ml/, tools/           # *.onnx + manifest; Python pipeline; check-models.mjs, build-site.mjs (Next)
+├── models/, ml/, tools/           # *.onnx + manifest (Next); Python pipeline (Next); build-site, check-models, validate-clips
 ├── firmware/spinesense-motion/    # ESP32 firmware (compiles in CI; not yet run on hardware)
-├── test/                          # node --test (37 tests today)
-├── docs/                          # architecture, hardware, sensor-protocol, platform-brainstorm;
-│                                  #   validation, hazards, data-handling (Next)
+├── test/                          # node --test (53 tests today)
+├── docs/                          # architecture, hardware, sensor-protocol, platform-brainstorm,
+│                                  #   validation (+ plots); hazards, data-handling (Next)
 ├── reports/, research_notes/      # research report, evidence base
-├── LICENSE, THIRD_PARTY_NOTICES.md                                                          (Next)
-└── .github/workflows/             # ci.yml, pages.yml                                       (Next)
+├── LICENSE (Apache-2.0); THIRD_PARTY_NOTICES.md                                  (notices: Next)
+└── .github/workflows/             # ci.yml, pages.yml
 ```
 
 ## 9. CI/CD and quality
 
 | Workflow | Runs |
 |---|---|
-| `ci.yml` (Written, first run pending) | One workflow, three jobs until `ml/` has tests: `test` (`node --test`, including the §10 import-boundary test in `test/release.test.mjs`), `firmware` (§7; both boards via a matrix, ESP32 core 3.3.12, M5Unified 0.2.27, arduino-cli 1.5.1), `site` (build the allowlist, run `tools/check-models.mjs`). Add `pytest ml/` once `ml/` has tests. No Prettier ("no dependencies" is a selling point); ESLint is optional via `npx` |
+| `ci.yml` (Built, green) | One workflow, three jobs until `ml/` has tests: `test` (`node --test`, including the §10 import-boundary test in `test/release.test.mjs`), `firmware` (§7; both boards via a matrix, ESP32 core 3.3.12, M5Unified 0.2.27, arduino-cli 1.5.1), `site` (build the allowlist, run `tools/check-models.mjs`). Add `pytest ml/` once `ml/` has tests. No Prettier ("no dependencies" is a selling point); ESLint is optional via `npx` |
 | `pages.yml` (Written, first run pending) | `tools/build-site.mjs` copies an allowlist (`index.html css js docs models`; `docs/` because the Sensors page links the hardware guide) to `_site/`, refuses deny-listed paths, and deploys only that, never the repo root (which would publish `research_notes/`, `reports/`, `.claude/`, `test/`, `firmware/`). Pages gives no custom headers (CSP stays in `index.html`; no cross-origin isolation), a 10-minute cache (so models use hashed names and the manifest is fetched with `cache: 'no-cache'`) and no server logs. HTTPS makes camera and Web Bluetooth work, giving a **live demo link**; the page says Web Bluetooth is Chrome/Edge only. Lighthouse and axe-core on each deploy: Next |
 
 ## 10. Safety, privacy and regulatory guardrails (Next unless marked)

@@ -9,14 +9,16 @@ import * as history from './views/history.js';
 import * as safety from './views/safety.js';
 import * as settings from './views/settings.js';
 import * as sensors from './views/sensors.js';
+import * as recordings from './views/recordings.js';
 
-const ROUTES = { dashboard, session, exercises, history, sensors, safety, settings };
+const ROUTES = { dashboard, session, exercises, history, sensors, recordings, safety, settings };
 const NAV = [
   ['dashboard', 'Dashboard', 'dashboard'],
   ['session', 'Start session', 'session', 'nav-cta'],
   ['exercises', 'Exercises', 'exercises'],
   ['history', 'History', 'history'],
   ['sensors', 'Sensors', 'sensor'],
+  ['recordings', 'Recordings', 'record'],
   ['safety', 'Safety check', 'safety'],
   ['settings', 'Settings', 'settings'],
 ];

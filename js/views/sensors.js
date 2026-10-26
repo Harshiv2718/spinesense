@@ -3,6 +3,8 @@ import { hub } from '../sensors/hub.js';
 import { BleSensor } from '../sensors/ble.js';
 import { SimSensor, simCalibration } from '../sensors/sim.js';
 import { ROLE_LABEL } from '../sensors/protocol.js';
+import { spread } from '../sensors/posture.js';
+import { benchReference, benchMeasure, benchSummary } from '../analysis/bench.js';
 
 const fmtDeg = (v) => {
   if (v == null || Number.isNaN(v)) return '—';
@@ -151,6 +153,7 @@ export function render(root) {
           h('li', {}, 'Use kinesiology tape or a snug elastic strap. Which way round doesn’t matter: calibration handles it.'),
           h('li', {}, 'One sensor (upper) gives trunk angle. Two give the true lower-back angle.')),
         h('a', { href: 'docs/hardware.md', target: '_blank', class: 'small' }, 'Hardware guide: parts, wiring and firmware')),
+      benchCard(),
       h('section', { class: 'card stack' }, h('h2', {}, 'Raw data'), h('p', { class: 'small muted' }, 'Saves the raw sensor stream as a JSON file for checking firmware or building datasets. Nothing is uploaded.'), recBtn))));
 
   const metaEls = new Map();
@@ -251,4 +254,65 @@ export function download(filename, data) {
   a.download = filename;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+/** Collect one device's samples for a few seconds. */
+function collect(deviceId, seconds) {
+  return new Promise((resolve) => {
+    const samples = [];
+    const on = (e) => {
+      if (e.detail.device.id === deviceId) samples.push(e.detail.sample);
+    };
+    hub.addEventListener('sample', on);
+    setTimeout(() => {
+      hub.removeEventListener('sample', on);
+      resolve(samples);
+    }, seconds * 1000);
+  });
+}
+
+/** Bench test: validate the sensor itself against known rig angles before trusting it as a reference. */
+function benchCard() {
+  const box = h('section', { class: 'card stack' });
+  const state = { deviceId: null, ref: null, rows: [], shown: false };
+  const render = () => {
+    // The hub outlives this page: stop listening once the card has left the page.
+    if (state.shown && !box.isConnected) return hub.removeEventListener('change', render);
+    state.shown = state.shown || box.isConnected;
+    const devices = hub.list.filter((d) => d.status === 'connected');
+    if (!devices.some((d) => d.id === state.deviceId)) state.deviceId = devices[0]?.id ?? null;
+    const summary = benchSummary(state.rows);
+    const capture = async (target, btn) => {
+      btn.disabled = true;
+      btn.textContent = 'Hold still…';
+      const samples = await collect(state.deviceId, 2);
+      btn.disabled = false;
+      if (samples.length < 20) return toast('Too few samples: is the sensor streaming?', { tone: 'warn' });
+      if (spread(samples) > 1.5) return toast('The sensor moved during the capture. Hold it still on the rig and try again.', { tone: 'warn' });
+      if (target === 0) {
+        state.ref = benchReference(samples);
+        state.rows = [];
+      } else {
+        state.rows = [...state.rows.filter((r) => r.target !== target), benchMeasure(state.ref, samples, target)].sort((a, b) => a.target - b.target);
+      }
+      render();
+    };
+    box.replaceChildren(
+      h('h2', {}, 'Bench test (sensor accuracy)'),
+      h('p', { class: 'small muted' }, 'Before trusting the sensor as the reference, check it against known angles: lay it on a flat surface (0°), then tilt it on a rig such as a protractor, a phone level app or a 3D-printed wedge. Each capture takes 2 seconds of stillness.'),
+      !devices.length ? h('p', { class: 'small faint' }, 'Connect a sensor first.') : h('div', { class: 'stack', style: { gap: '10px' } },
+        h('select', { 'aria-label': 'Sensor to test', onchange: (e) => { state.deviceId = e.target.value; state.ref = null; state.rows = []; render(); } },
+          devices.map((d) => h('option', { value: d.id, selected: d.id === state.deviceId }, d.name))),
+        h('div', { class: 'row' },
+          (() => { const b = h('button', { class: 'btn btn-sm btn-primary', type: 'button' }, state.ref ? 'Redo 0° reference' : 'Capture 0° (flat)'); b.addEventListener('click', () => capture(0, b)); return b; })(),
+          ...[30, 45, 60, 90].map((deg) => { const b = h('button', { class: 'btn btn-sm', type: 'button', disabled: !state.ref }, `${deg}°`); b.addEventListener('click', () => capture(deg, b)); return b; })),
+        state.rows.length ? h('table', { class: 'data-table' },
+          h('thead', {}, h('tr', {}, ['Rig angle', 'Measured', 'Error', 'Steadiness (SD)'].map((t) => h('th', {}, t)))),
+          h('tbody', {}, state.rows.map((r) => h('tr', {}, h('td', {}, `${r.target}°`), h('td', {}, `${r.measured}°`), h('td', {}, `${r.error > 0 ? '+' : ''}${r.error}°`), h('td', {}, `${r.sd}°`))))) : null,
+        summary ? h('p', { class: 'small' }, `Largest error ${summary.maxAbsError}°, mean ${summary.meanAbsError}°. Record these in docs/validation.md along with how the rig angles were set.`) : null,
+        h('p', { class: 'small faint' }, 'Simulated sensors move on their own, so this test only makes sense with real hardware.')));
+  };
+  hub.addEventListener('change', render);
+  render();
+  return box;
 }

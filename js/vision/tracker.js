@@ -28,12 +28,13 @@ function loadVision() {
   return visionPromise;
 }
 
+/** Returns { task, delegate }: recordings note which one ran, since GPU and CPU outputs differ slightly. */
 async function createTask(Task, fileset, options) {
   try {
-    return await Task.createFromOptions(fileset, { ...options, baseOptions: { ...options.baseOptions, delegate: 'GPU' } });
+    return { task: await Task.createFromOptions(fileset, { ...options, baseOptions: { ...options.baseOptions, delegate: 'GPU' } }), delegate: 'GPU' };
   } catch (e) {
     console.warn('GPU delegate unavailable, using CPU', e);
-    return Task.createFromOptions(fileset, { ...options, baseOptions: { ...options.baseOptions, delegate: 'CPU' } });
+    return { task: await Task.createFromOptions(fileset, { ...options, baseOptions: { ...options.baseOptions, delegate: 'CPU' } }), delegate: 'CPU' };
   }
 }
 
@@ -63,13 +64,14 @@ export class CameraTracker {
     this.lastTs = 0;
     this.frameNo = 0;
     this.demo = false;
+    this.info = { source: 'camera', tasksVersion: TASKS_VERSION, poseModel: `pose_landmarker_${variant}`, poseModelUrl: MODELS[variant] ?? MODELS.full };
   }
 
   async load(onStatus) {
     onStatus?.('Loading vision engine…');
     const { mod, fileset } = await loadVision();
     onStatus?.('Loading body-tracking model…');
-    this.pose = await createTask(mod.PoseLandmarker, fileset, {
+    const pose = await createTask(mod.PoseLandmarker, fileset, {
       baseOptions: { modelAssetPath: MODELS[this.variant] ?? MODELS.full },
       runningMode: 'VIDEO',
       numPoses: 1,
@@ -77,15 +79,19 @@ export class CameraTracker {
       minPosePresenceConfidence: 0.5,
       minTrackingConfidence: 0.5,
     });
+    this.pose = pose.task;
+    this.info.poseDelegate = pose.delegate;
     if (this.useFace) {
       onStatus?.('Loading face model…');
       try {
-        this.face = await createTask(mod.FaceLandmarker, fileset, {
+        const face = await createTask(mod.FaceLandmarker, fileset, {
           baseOptions: { modelAssetPath: MODELS.face },
           runningMode: 'VIDEO',
           numFaces: 1,
           outputFaceBlendshapes: true,
         });
+        this.face = face.task;
+        this.info.faceDelegate = face.delegate;
       } catch (e) {
         console.warn('Face model failed to load; continuing with body signals only', e);
         this.face = null;
@@ -111,11 +117,26 @@ export class CameraTracker {
   start(onFrame) {
     this.onFrame = onFrame;
     this.running = true;
+    const v = this.video;
+    // requestVideoFrameCallback runs once per new camera frame and can report when it was captured.
+    if (typeof v.requestVideoFrameCallback === 'function') {
+      const cb = (now, meta) => {
+        if (!this.running) return;
+        this.vfc = v.requestVideoFrameCallback(cb);
+        try {
+          this.step(meta);
+        } catch (e) {
+          console.error(e);
+        }
+      };
+      this.vfc = v.requestVideoFrameCallback(cb);
+      return;
+    }
     const loop = () => {
       if (!this.running) return;
       this.raf = requestAnimationFrame(loop);
       try {
-        this.step();
+        this.step(null);
       } catch (e) {
         console.error(e);
       }
@@ -123,7 +144,7 @@ export class CameraTracker {
     loop();
   }
 
-  step() {
+  step(meta) {
     const v = this.video;
     if (v.readyState < 2 || !v.videoWidth || v.currentTime === this.lastVideoTime) return;
     this.lastVideoTime = v.currentTime;
@@ -143,7 +164,16 @@ export class CameraTracker {
     }
     let face = null;
     if (this.face && frame && this.frameNo++ % 2 === 0) face = this.detectFace(frame.lm, ts + 0.5);
-    this.onFrame({ frame, face, t, fps: this.fps.tick(t) });
+    this.onFrame({
+      frame,
+      face,
+      t,
+      // Capture time on the same clock as performance.now(), when the browser provides it.
+      tCapture: meta?.captureTime != null ? meta.captureTime / 1000 : null,
+      // Unfiltered model output: recordings keep this so smoothing can be re-done offline.
+      raw: res.landmarks?.length ? { lm: res.landmarks[0], world: res.worldLandmarks?.[0] ?? null } : null,
+      fps: this.fps.tick(t),
+    });
   }
 
   /** Crop the head region from the full frame and upscale it, so the face model works even 3 m away. */
@@ -164,6 +194,7 @@ export class CameraTracker {
   stop() {
     this.running = false;
     cancelAnimationFrame(this.raf);
+    if (this.vfc != null) this.video.cancelVideoFrameCallback?.(this.vfc);
     this.stream?.getTracks().forEach((t) => t.stop());
     this.video.srcObject = null;
   }
@@ -187,6 +218,7 @@ export class SimTracker {
     this.person = null;
     this.mode = 'idle';
     this.demo = true;
+    this.info = { source: 'demo', tasksVersion: 'simulated', poseModel: 'SimPerson', poseDelegate: 'none' };
   }
 
   async load(onStatus) {
@@ -227,10 +259,16 @@ export class SimTracker {
   start(onFrame) {
     this.onFrame = onFrame;
     this.running = true;
+    // Run at webcam speed (about 30 fps) whatever the display's refresh rate, so demo clips match real ones.
+    const FRAME = 1 / 30;
+    let last = -Infinity;
     const loop = () => {
       if (!this.running) return;
       this.raf = requestAnimationFrame(loop);
-      this.tick(performance.now() / 1000);
+      const now = performance.now() / 1000;
+      if (now - last < FRAME - 0.004) return;
+      last = now;
+      this.tick(now);
     };
     loop();
   }
@@ -242,7 +280,14 @@ export class SimTracker {
     const fr = this.person.frame(now - this.t0);
     const lm = this.smooth.apply(fr.lm, now);
     const world = this.smoothW.apply(fr.world, now);
-    this.onFrame({ frame: makeFrame(lm, world, fr.aspect, now), face: { score: fr.face.score, frontal: fr.face.frontal, found: true }, t: now, fps: this.fps.tick(now) });
+    this.onFrame({
+      frame: makeFrame(lm, world, fr.aspect, now),
+      face: { score: fr.face.score, frontal: fr.face.frontal, found: true },
+      t: now,
+      tCapture: now,
+      raw: { lm: fr.lm, world: fr.world },
+      fps: this.fps.tick(now),
+    });
   }
 
   stop() {

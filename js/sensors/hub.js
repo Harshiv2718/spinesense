@@ -2,6 +2,7 @@
 // wizard, and turns the latest samples into trunk, pelvis and lumbar angles.
 
 import { AxisCalibration, spread } from './posture.js';
+import { ClockFit } from './timesync.js';
 
 const CAL_KEY = 'spinesense.sensorcal';
 const CAL_HOURS = 12; // straps move between days, so calibrations expire
@@ -47,7 +48,7 @@ export class SensorHub extends EventTarget {
 
   /** Register a driver (BleSensor or SimSensor) and connect it. */
   async add(driver) {
-    const d = { id: driver.id, name: driver.name, role: driver.role ?? 'unknown', driver, simulated: !!driver.simulated, status: 'connecting', battery: null, info: null, last: null, history: [], cal: null };
+    const d = { id: driver.id, name: driver.name, role: driver.role ?? 'unknown', driver, simulated: !!driver.simulated, status: 'connecting', battery: null, info: null, last: null, history: [], cal: null, clock: new ClockFit() };
     d.cal = restoreCal(`${d.id}:${d.role}`);
     driver.addEventListener('sample', (e) => this.onSample(d, e.detail));
     driver.addEventListener('status', (e) => {
@@ -77,11 +78,12 @@ export class SensorHub extends EventTarget {
 
   onSample(d, s) {
     s.rx ??= this.clock();
+    s.tl = d.clock.add(s.t, s.rx); // when the sample was taken, on the browser clock (jitter removed)
     d.last = s;
     d.history.push(s);
     while (d.history.length && s.rx - d.history[0].rx > HISTORY) d.history.shift();
     this.calibrator?.feed(d, s);
-    if (this.recording) this.recording.rows.push([d.role, +s.rx.toFixed(3), s.t, ...s.q.map((v) => +v.toFixed(4)), ...s.a.map((v) => +v.toFixed(3))]);
+    if (this.recording) this.recording.rows.push([d.role, +s.rx.toFixed(4), s.t, +s.tl.toFixed(4), ...s.q.map((v) => +v.toFixed(5)), ...s.a.map((v) => +v.toFixed(4))]);
     this.dispatchEvent(new CustomEvent('sample', { detail: { device: d, sample: s } }));
   }
 
@@ -156,7 +158,7 @@ export class SensorHub extends EventTarget {
   }
 
   startRecording() {
-    this.recording = { started: new Date().toISOString(), columns: ['role', 'rx_s', 'device_ms', 'qw', 'qx', 'qy', 'qz', 'ax_g', 'ay_g', 'az_g'], rows: [] };
+    this.recording = { started: new Date().toISOString(), columns: ['role', 'rx_s', 'device_ms', 'tl_s', 'qw', 'qx', 'qy', 'qz', 'ax_g', 'ay_g', 'az_g'], rows: [] };
   }
 
   stopRecording() {

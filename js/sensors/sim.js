@@ -16,8 +16,12 @@ export function simOrientation(flexDeg, sideDeg = 0, twistDeg = 0) {
 }
 
 export class SimSensor extends EventTarget {
-  /** source(role, timeSeconds) -> { flex, side } in degrees for this body segment. */
-  constructor({ role = 'upper', source, twist = 17, noise = 0.004, interval = true } = {}) {
+  /**
+   * source(role, timeSeconds) -> { flex, side } in degrees for this body segment.
+   * radio (optional) makes the timing realistic: { offset (s the device clock is behind), drift (ppm),
+   * latency (s minimum), jitter (s, mean extra delay), burst (probability per sample of a radio burst) }.
+   */
+  constructor({ role = 'upper', source, twist = 17, noise = 0.004, interval = true, radio = null, seed = 1 } = {}) {
     super();
     this.id = `sim-${role}`;
     this.name = `Simulated sensor (${role})`;
@@ -28,6 +32,16 @@ export class SimSensor extends EventTarget {
     this.seq = 0;
     this.simulated = true;
     this.interval = interval; // false: the caller drives tick() (tests, demo sessions)
+    this.radio = radio;
+    this.backlog = 0;
+    let a = seed >>> 0;
+    this.rand = () => {
+      a = (a + 0x6d2b79f5) >>> 0;
+      let t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
   }
 
   emit(type, detail) {
@@ -46,9 +60,19 @@ export class SimSensor extends EventTarget {
     const q = simOrientation(flex, side, this.twist);
     const n = () => (Math.random() - 0.5) * 2 * this.noise;
     const a = qrotate(qconj(q), [0, 0, 1]).map((c) => c + n());
-    const packet = encodeSample({ role: this.role, gyroOk: true, still: false, seq: this.seq++, t: Math.round(now * 1000), q, a });
+    const r = this.radio;
+    // Device clock (ms) and arrival time, with the sensor's own offset/drift and radio delays if simulated.
+    const deviceMs = r ? Math.round((now - r.offset) * (1 + (r.drift ?? 0) * 1e-6) * 1000) : Math.round(now * 1000);
+    let rx = now;
+    if (r) {
+      if (this.rand() < (r.burst ?? 0)) this.backlog = 0.05 + this.rand() * 0.08;
+      this.backlog = Math.max(0, this.backlog - 0.02);
+      rx = now + (r.latency ?? 0) - Math.log(1 - this.rand()) * (r.jitter ?? 0) + this.backlog;
+    }
+    const packet = encodeSample({ role: this.role, gyroOk: true, still: false, seq: this.seq++, t: deviceMs, q, a });
     const sample = decodeSample(packet);
-    sample.rx = now;
+    sample.rx = rx;
+    sample.tTrue = now; // ground truth, only the simulator knows it
     this.emit('sample', sample);
   }
 

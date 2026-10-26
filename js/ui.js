@@ -44,6 +44,7 @@ const ICONS = {
   trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
   download: '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>',
   upload: '<path d="M12 20V9M7 14l5-5 5 5M5 4h14"/>',
+  record: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.5" fill="currentColor" stroke="none"/>',
   sensor: '<rect x="8" y="6" width="8" height="12" rx="2"/><path d="M12 9.5v.01M4.5 9a6 6 0 0 0 0 6M19.5 9a6 6 0 0 1 0 6M2 7a9 9 0 0 0 0 10M22 7a9 9 0 0 1 0 10"/>',
   spine: '<rect x="9" y="2.5" width="6" height="3.2" rx="1.4"/><rect x="8.4" y="7.2" width="7.2" height="3.2" rx="1.4"/><rect x="8" y="11.9" width="8" height="3.4" rx="1.5"/><rect x="8.4" y="16.8" width="7.2" height="3.4" rx="1.5"/><path d="M12 20.4v1.6"/>',
 };

@@ -14,6 +14,10 @@ import { Diagnostics } from './diagnostics.js';
 import { hub, SensorHub } from '../sensors/hub.js';
 import { SimSensor, simCalibration, simSegmentAngles } from '../sensors/sim.js';
 import { openCalibrationModal, download } from './sensors.js';
+import { ClipRecorder, clipToJSON } from '../data/clip.js';
+import { saveClip } from '../data/clipstore.js';
+import { clipConsent, askClipConsent } from './consent.js';
+import { DEFAULT_RADIO } from '../analysis/simclip.js';
 
 const DEMO_DEFAULT = new Set(['side-bend', 'hip-hinge', 'glute-bridge']);
 
@@ -155,7 +159,18 @@ function setup(root, { demo, single, state }) {
   }
 
   // Back sensors (optional): status, calibration, and the training-clip recorder.
-  const recordToggle = () => toggle('Record a training clip', cfg.record, (v) => { cfg.record = v; }, 'Saves landmarks and sensor data (no video) as a file at the end. Useful for building datasets.');
+  // Recording needs consent first; declining switches the toggle back off.
+  const recordToggle = () => {
+    const el = toggle('Record a training clip', cfg.record, async (v) => {
+      if (v && !clipConsent() && !(await askClipConsent())) {
+        el.querySelector('input').checked = false;
+        cfg.record = false;
+        return;
+      }
+      cfg.record = v;
+    }, 'Saves body landmarks and sensor readings (no video) to Recordings on this device, for checking the camera against the sensor.');
+    return el;
+  };
   const sensorBox = h('section', { class: 'card stack' });
   const renderSensorBox = () => {
     if (demo) {
@@ -241,7 +256,7 @@ class LiveSession {
     // Real sessions use the app-wide sensor hub; the demo gets its own simulated pair.
     this.sensors = cfg.demo ? (cfg.simSensors ? new SensorHub({ clock: () => this.now() }) : null) : hub;
     this.faults = {};
-    this.rec = cfg.record ? { meta: { app: 'SpineSense', kind: 'training-clip', started: new Date().toISOString(), demo: !!cfg.demo, plan: cfg.items.map((i) => `${i.id}@${i.level}`), landmarks: 'MediaPipe Pose 33 x [x, y, z, visibility], normalised image coordinates' }, frames: [] } : null;
+    this.rec = cfg.record ? new ClipRecorder({ consent: clipConsent(), plan: cfg.items.map((i) => `${i.id}@${i.level}`), simulated: !!cfg.demo }) : null;
     this.build();
     this.tracker = cfg.demo ? new SimTracker() : new CameraTracker({ video: this.video, variant: this.settings.modelVariant, face: cfg.face });
     window.__sessionLive = true;
@@ -400,7 +415,11 @@ class LiveSession {
       this.stage.style.aspectRatio = `${vw} / ${vh}`;
     }
     if (this.cfg.demo && this.sensors) await this.addDemoSensors();
-    if (this.rec && this.sensors) this.sensors.startRecording();
+    if (this.rec) {
+      const [vw, vh] = this.tracker.size;
+      this.rec.clip.capture = { ...this.tracker.info, aspect: vw / vh, videoSize: [vw, vh] };
+      this.sensors?.startRecording();
+    }
     this.tracker.start((f) => this.onFrame(f));
     if (this.cfg.voiceInput) {
       this.listener = new Listener((k, v) => this.onVoice(k, v), (s) => {
@@ -417,7 +436,9 @@ class LiveSession {
     const source = (role) => (this.simPose && this.spec ? simSegmentAngles(this.simPose, this.spec.view, this.faults)[role] : { flex: 0, side: 0 });
     this.demoSensors = [];
     for (const [role, twist] of [['upper', 11], ['lower', -16]]) {
-      const sensor = new SimSensor({ role, source, interval: false, twist });
+      // Realistic timing (clock offset, drift, radio delay and bursts) so recordings exercise time alignment.
+      const radio = { ...DEFAULT_RADIO, offset: DEFAULT_RADIO.offset + (role === 'lower' ? 1.9 : 0), drift: role === 'lower' ? -DEFAULT_RADIO.drift : DEFAULT_RADIO.drift };
+      const sensor = new SimSensor({ role, source, interval: false, twist, radio, seed: role === 'lower' ? 29 : 11 });
       const d = await this.sensors.add(sensor);
       d.cal = simCalibration(twist);
       this.demoSensors.push(sensor);
@@ -543,7 +564,7 @@ class LiveSession {
     const d = st.phase === 'active' ? this.det.tick(t) : null;
     this.renderState(st, d, fr.face);
     this.renderSensors(f.sensors, t);
-    this.record(f, st, t);
+    this.rec?.addFrame(fr, { ex: this.spec.id, level: this.run.levelIdx, phase: st.phase, rep: st.reps, state: st.repState });
     this.diag.sample(this, fr, st, d);
     if (d?.trigger) this.onDiscomfort(d, t);
     if (st.phase === 'complete' && !this.completing) {
@@ -569,18 +590,6 @@ class LiveSession {
     set('lumbar', sn?.lumbar?.flex);
   }
 
-  /** Training clip: landmarks + sensor angles per frame (no video). */
-  record(f, st, t) {
-    if (!this.rec || this.rec.frames.length >= 30 * 600) return;
-    const r = (v, k = 4) => +v.toFixed(k);
-    const sn = f.sensors;
-    this.rec.frames.push({
-      t: r(t, 3), ex: this.spec.id, level: this.run.levelIdx, phase: st.phase, rep: st.reps, state: st.repState, value: r(st.value ?? 0, 2),
-      lm: f.lm.map((p) => [r(p.x), r(p.y), r(p.z), r(p.visibility ?? 1, 2)]),
-      sensor: sn?.ok ? { trunk: [r(sn.trunk.flex, 1), r(sn.trunk.side, 1)], pelvis: sn.pelvis ? [r(sn.pelvis.flex, 1), r(sn.pelvis.side, 1)] : null, lumbar: sn.lumbar ? [r(sn.lumbar.flex, 1), r(sn.lumbar.side, 1)] : null } : null,
-    });
-  }
-
   handRaised(f, t) {
     const nose = f.p(0);
     const up = (i) => f.vis(i) > 0.6 && f.p(i).y < nose.y - 0.08;
@@ -594,7 +603,10 @@ class LiveSession {
 
   handleEvent(ev, st) {
     const spec = this.spec;
-    if (ev.type !== 'hold-tick' && ev.type !== 'rep-start') this.diag.event(this.now(), spec.id, ev);
+    if (ev.type !== 'hold-tick' && ev.type !== 'rep-start') {
+      this.diag.event(this.now(), spec.id, ev);
+      this.rec?.addEvent(this.now(), spec.id, ev);
+    }
     switch (ev.type) {
       case 'ready':
         this.voice.say(spec.kind === 'hold' ? 'Good. Begin when ready.' : 'Good. Begin.', { priority: true });
@@ -961,7 +973,14 @@ class LiveSession {
     this.voice.say(`Session complete. ${reps} reps. Well done.`, { priority: true });
     let painAfter = null;
 
-    if (this.rec && this.sensors?.recording) this.rec.sensorRaw = this.sensors.stopRecording();
+    let clip = null;
+    if (this.rec) {
+      clip = this.rec.finish({ sensors: this.sensors?.list ?? [], sensorRaw: this.sensors?.recording ? this.sensors.stopRecording() : null, results });
+      this.rec = null;
+      saveClip(clip)
+        .then(() => toast(`Training clip saved to Recordings (${clip.frames.rows.length} frames)`))
+        .catch((e) => toast(`${e.message} Use "Download clip" to keep it.`, { tone: 'warn', ms: 6000 }));
+    }
     const save = h('button', { class: 'btn btn-primary btn-lg', type: 'button' }, 'Save session');
     const hasSensor = results.some((r) => r.sensor);
     const root = this.root;
@@ -992,8 +1011,9 @@ class LiveSession {
             ? h('div', { class: 'callout info' }, icon('info'), h('p', { class: 'small' }, 'Demo sessions aren’t saved. Do the safety check and start a real session to begin tracking.'))
             : null,
           this.cfg.demo ? h('a', { class: 'btn btn-primary btn-lg', href: '#/dashboard' }, 'Back to dashboard') : save,
-          this.rec ? h('button', { class: 'btn', type: 'button', onclick: () => download(`spinesense-clip-${new Date(this.startedAt).toISOString().slice(0, 19).replace(/:/g, '')}.json`, { ...this.rec, results }) }, icon('download', 15), `Download training clip (${this.rec.frames.length} frames)`) : null,
-          this.rec ? h('p', { class: 'small faint' }, 'The clip holds your body landmarks and sensor angles, not video. Keep it private.') : null,
+          clip ? h('a', { class: 'btn', href: '#/recordings' }, icon('record', 15), 'Open in Recordings') : null,
+          clip ? h('button', { class: 'btn', type: 'button', onclick: () => download(`spinesense-${clip.id}.json`, clipToJSON(clip)) }, icon('download', 15), 'Download clip (.json)') : null,
+          clip ? h('p', { class: 'small faint' }, 'The clip holds body landmarks and sensor readings, not video. Keep downloaded copies private.') : null,
           h('button', { class: 'btn', type: 'button', onclick: () => this.diag.copy(results) }, 'Copy test report'))));
 
     save.addEventListener('click', () => {

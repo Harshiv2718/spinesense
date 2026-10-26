@@ -7,6 +7,7 @@ const DEFAULTS = {
   profile: null, // { name, screening: {...} }
   progress: {}, // exerciseId -> { level, good, restUntil }
   sessions: [],
+  consent: {}, // { clips: { version, at, scopes } }
   settings: {
     voiceCoach: true,
     voiceInput: false,

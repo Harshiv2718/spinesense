@@ -21,7 +21,7 @@ Then open http://localhost:5173 and allow camera access. Browsers only allow the
 
 No webcam handy? **Demo (no camera)** on the dashboard runs a simulated person through the exercises. Use **Simulate pain on next rep** to watch the discomfort detection respond.
 
-Run the tests with `npm test` (42 tests: exercise engine, discomfort detector, safety rules, sensor maths, and the release checks).
+Run the tests with `npm test` (53 tests: exercise engine, discomfort detector, safety rules, sensor maths, time alignment, clip format, agreement statistics, and the release checks).
 
 ## Deploy your own demo (GitHub Pages)
 
@@ -62,8 +62,10 @@ Webcam ─┬─ MediaPipe Pose (33 body points, 3D) ─► One-Euro smoothing �
 | `js/coach/voice.js` | Spoken coaching and voice commands |
 | `js/program.js` | Safety screening, daily plan, progression rules, stats |
 | `js/sensors/` | Back-sensor protocol, Web Bluetooth driver, calibration and lumbar-angle maths, simulator, hub |
+| `js/data/`, `js/analysis/` | Clip format and IndexedDB library; camera-vs-sensor agreement statistics, Bland–Altman plots, bench test, clip simulator |
 | `firmware/` | ESP32 firmware (M5StickC Plus2 or ESP32 + MPU6050): fusion + BLE streaming |
-| `js/views/` | Dashboard, live session, exercise library, history, sensors, safety check, settings |
+| `js/views/` | Dashboard, live session, exercise library, history, sensors, recordings, safety check, settings |
+| `tools/` | Site build (allowlist), model licence gate, validation report generator |
 
 ### Back sensors (optional)
 
@@ -72,9 +74,19 @@ Strap one or two cheap motion sensors (ESP32 + IMU, about $6–20 each) to your 
 - **One sensor** (upper back) gives an accurate trunk angle.
 - **Two sensors** (upper back + sacrum) give the true **lower-back angle** (upper minus lower, the clinical dual-inclinometer method). That lets the coach tell bending from the hips apart from rounding the lower back.
 - A 15-second calibration learns how each sensor is strapped on, so orientation doesn't matter.
-- **Training clips** save landmarks plus sensor angles (no video), so sensor readings become accurate labels for training better camera-only models.
+- **Training clips** save landmarks plus raw sensor readings (no video) to the **Recordings** page, after you agree to it once. Sensor readings then become accurate labels for training better camera-only models.
 
 Try it without hardware: **Sensors → Try simulated sensors**, or the demo session, which can wear simulated sensors and **Simulate rounded lower back**. Hardware, wiring and flashing: [docs/hardware.md](docs/hardware.md). Protocol: [docs/sensor-protocol.md](docs/sensor-protocol.md).
+
+### Validation: how close is the camera to the sensor?
+
+[docs/validation.md](docs/validation.md) describes the method and holds the results:
+
+1. **Bench-test the sensor** against known angles (Sensors → Bench test).
+2. **Line up the clocks.** A clock fit removes Bluetooth jitter and crystal drift, then cross-correlation finds the camera-to-sensor offset.
+3. **Compare** the camera's trunk angle with the sensor, exercise by exercise: bias, Bland–Altman limits of agreement, ICC and concordance.
+
+The Recordings page runs the same analysis on any clip and draws the plots. `node tools/validate-clips.mjs clip.json …` regenerates the results page from exported clips. Until real hardware recordings exist, the published numbers come from a **simulated** session: they prove the pipeline works, not that the camera is accurate.
 
 ### Exercises
 
@@ -93,7 +105,7 @@ Overhead arm raise, standing side bend, standing hip hinge, sit to stand, single
 
 ### Privacy
 
-Video is processed on-device and never stored or uploaded. The page downloads the MediaPipe engine and models from cdn.jsdelivr.net and storage.googleapis.com, and a Content Security Policy blocks it from contacting any other host. Sessions, pain ratings and settings live in the browser's localStorage (unencrypted), and you can export or delete them in Settings. The optional "listen for ow/stop" feature uses the browser's speech service, which in Chrome and Edge sends audio to the browser maker's servers. It is off by default.
+Video is processed on-device and never stored or uploaded. The page downloads the MediaPipe engine and models from cdn.jsdelivr.net and storage.googleapis.com, and a Content Security Policy blocks it from contacting any other host. Sessions, pain ratings and settings live in the browser's localStorage (unencrypted), and you can export or delete them in Settings. Training clips are recorded only after you agree to it. They are stored in the browser's IndexedDB on this device and never uploaded, and withdrawing consent deletes them all. The optional "listen for ow/stop" feature uses the browser's speech service, which in Chrome and Edge sends audio to the browser maker's servers. It is off by default.
 
 ### Known limits
 

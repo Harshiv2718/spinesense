@@ -138,3 +138,20 @@ test('hip hinge with two back sensors: a rounding lower back triggers "bend from
   assert.ok(cues.includes('lumbar-round'), `cues were ${cues}`);
   near(summary.sensor.lumbarFlexMax, 42, 3);
 });
+
+// ---------- bench test (validating the reference itself) ----------
+
+import { benchReference, benchMeasure, benchSummary } from '../js/analysis/bench.js';
+
+test('bench test: a sensor on a rig at known angles measures each within half a degree', () => {
+  const hold = (flex, n = 100) => Array.from({ length: n }, () => {
+    const q = simOrientation(flex, 0, 31);
+    const a = qrotate(qconj(q), [0, 0, 1]).map((c) => c + (Math.random() - 0.5) * 0.01);
+    return decodeSample(encodeSample({ q, a }));
+  });
+  const ref = benchReference(hold(0));
+  const rows = [30, 45, 60, 90].map((deg) => benchMeasure(ref, hold(deg), deg));
+  for (const r of rows) assert.ok(Math.abs(r.error) < 0.5, `${r.target}°: measured ${r.measured}°`);
+  assert.ok(benchSummary(rows).maxAbsError < 0.5);
+  assert.throws(() => benchReference(hold(0, 5)));
+});
