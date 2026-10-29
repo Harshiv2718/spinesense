@@ -115,6 +115,19 @@ export function modal(content, { label = 'Dialog', dismissable = true, wide = fa
   return { close, panel };
 }
 
+/** Copies text; if the browser refuses, shows it selected in a dialog so it can be copied by hand. */
+export async function copyText(text, { done = 'Copied', title = 'Copy this' } = {}) {
+  try {
+    await navigator.clipboard.writeText(text);
+    toast(done);
+  } catch {
+    const ta = h('textarea', { readonly: true, rows: Math.min(10, text.split('\n').length + 1), style: { width: '100%', fontFamily: 'monospace', fontSize: '12px' } }, text);
+    const dlg = modal(h('div', { class: 'stack' }, h('h2', {}, title), h('p', { class: 'muted small' }, 'Your browser didn’t allow copying automatically. Select the text below and copy it.'), ta,
+      h('div', { class: 'actions' }, h('button', { class: 'btn btn-primary', type: 'button', onclick: () => dlg.close() }, 'Done'))), { label: title });
+    ta.select();
+  }
+}
+
 export function toast(message, { tone = 'info', ms = 3200 } = {}) {
   const root = document.getElementById('toast-root');
   const t = h('div', { class: `toast tone-${tone}`, role: 'status' }, message);

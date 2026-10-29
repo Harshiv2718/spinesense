@@ -481,6 +481,9 @@ body[data-route="session"] .main { max-width: none; }
   .grid-kpi { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
   .stat .stat-value { font-size: 24px; }
   .nav a span:last-child { display: none; }
+  .nav a { min-height: 44px; min-width: 40px; justify-content: center; }
+  .hud-msg { font-size: 15px; padding: 8px 12px; }
+  .hud-msg small { font-size: 12px; }
 }
 
 /* ---------- diagnostics ---------- */

@@ -250,7 +250,7 @@ function setup(root, { demo, single, state }) {
   renderList();
   root.append(h('div', { class: 'grid grid-main' },
     h('section', { class: 'card' },
-      h('div', { class: 'section-title' }, h('h2', {}, 'Exercises'), h('p', {}, 'Grouped so you only move the camera twice')),
+      h('div', { class: 'section-title' }, h('h2', {}, 'Exercises'), h('p', {}, demo ? 'The demo person does them in this order' : 'Grouped so you only move the camera twice')),
       notesBox, list),
     h('div', { class: 'stack' },
       nextDayCard,
@@ -264,7 +264,7 @@ function setup(root, { demo, single, state }) {
           ? h('label', { class: 'toggle' }, h('input', { type: 'checkbox', checked: cfg.voiceInput, onchange: (e) => { cfg.voiceInput = e.target.checked; } }), h('span', { class: 'toggle-track' }), h('span', { class: 'toggle-text' }, h('span', {}, 'Listen for "ow" and "stop"'), h('small', {}, 'Sends your microphone audio for the whole session, including anything else said in the room, to Google (Chrome) or Microsoft (Edge).')))
           : null),
       sensorBox,
-      h('div', { class: 'callout info' }, icon('camera'), h('div', { class: 'small' },
+      demo ? null : h('div', { class: 'callout info' }, icon('camera'), h('div', { class: 'small' },
         h('strong', {}, 'Before you start'),
         h('ul', {},
           h('li', {}, 'Clear about 2–3 m of floor space and stand back so your whole body, feet included, is in view.'),
@@ -370,7 +370,7 @@ class LiveSession {
       e.currentTarget.textContent = this.faults.round ? 'Stop rounding the lower back' : 'Simulate rounded lower back';
       toast(this.faults.round ? 'The demo person now bends from the lower back instead of the hips' : 'Back to a good hip hinge');
     } }, 'Simulate rounded lower back') : null;
-    const demoBtn = this.cfg.demo ? h('button', { class: 'btn btn-sm', type: 'button', style: { gridColumn: '1 / -1' }, onclick: () => { this.tracker.simulatePain(); toast('The demo person will start hurting on the next rep'); } }, icon('face', 15), 'Simulate pain on next rep') : null;
+    const demoBtn = this.cfg.demo ? h('button', { class: 'btn btn-sm', type: 'button', style: { gridColumn: '1 / -1' }, onclick: () => { this.tracker.simulatePain(); toast('From the next rep the demo person moves less and more slowly. Watch “Movement watch”, and press “I feel pain” to see the check-in.', { ms: 6000 }); } }, icon('face', 15), 'Simulate pain on next rep') : null;
 
     const panel = h('aside', { class: 'live-panel' },
       h('div', { class: 'card ex-head' }, u.step, u.name, u.badges),
@@ -391,9 +391,16 @@ class LiveSession {
       roundBtn,
       h('button', { class: 'btn btn-ghost', type: 'button', style: { gridColumn: '1 / -1' }, onclick: () => this.end() }, icon('stop', 15), 'End session'));
     panel.children[1].after(controls);
+    u.controls = controls;
+    this.setControls(false);
 
     this.root.append(h('div', { class: 'live' }, this.stage, panel));
     this.renderQueue();
+  }
+
+  /** Pain, pause and skip only mean something once exercises can run; End session always works. */
+  setControls(on) {
+    for (const b of this.ui.controls.querySelectorAll('button')) if (!b.classList.contains('btn-ghost')) b.disabled = !on;
   }
 
   setText(el, text) {
@@ -483,6 +490,7 @@ class LiveSession {
     }
     if (gone()) return this.tracker.stop();
     this.ui.loading.remove();
+    this.setControls(true);
     if (!this.cfg.demo) {
       const [vw, vh] = this.tracker.size;
       this.stage.style.aspectRatio = `${vw} / ${vh}`;
@@ -608,6 +616,7 @@ class LiveSession {
     this.lastT = fr.t;
     this.lastFrameAt = performance.now();
     this.checkSpeed(fr.fps);
+    if (this.cfg.demo) this.tracker.hold(!!(this.paused || this.checking || this.blocking));
     this.draw(fr.frame);
     const tracking = !!fr.frame;
     this.chips([
@@ -972,11 +981,11 @@ class LiveSession {
   }
 
   /** New or spreading leg symptoms: stop the exercise, rest it, and point to care. */
-  legStop() {
-    this.voice.say('Let’s stop this exercise. New or spreading leg symptoms are a reason to rest it.', { priority: true });
+  legStop({ finished = false } = {}) {
+    this.voice.say(finished ? 'New or spreading leg symptoms are a reason to rest this exercise.' : 'Let’s stop this exercise. New or spreading leg symptoms are a reason to rest it.', { priority: true });
     const last = this.idx + 1 >= this.cfg.items.length;
     const dlg = this.blockingModal(h('div', { class: 'stack' },
-      h('h2', {}, 'Stop this exercise'),
+      h('h2', {}, finished ? 'Rest this exercise' : 'Stop this exercise'),
       h('p', { class: 'muted' }, 'New or spreading leg symptoms mean this exercise rests for at least 2 days. If they keep spreading, or haven’t settled within a day or two, see a doctor or physio.'),
       h('div', { class: 'callout danger', style: { padding: '10px 12px' } }, h('p', { class: 'small' }, 'Get urgent medical help if you notice numbness around the groin or genitals, bladder or bowel changes, or a leg getting weaker.')),
       h('div', { class: 'actions' },
@@ -1084,7 +1093,7 @@ class LiveSession {
         h('span', { class: 'chip' }, `${s.reps}/${s.targetReps} ${this.spec.kind === 'hold' ? 'holds' : 'reps'}`),
         s.formScore != null ? h('span', { class: 'chip' }, `Form ${s.formScore}%`) : null,
         s.peakBest != null ? h('span', { class: 'chip' }, `Best ${s.peakBest}${s.unit}`) : null,
-        s.asymmetry ? h('span', { class: 'chip' }, `L ${s.asymmetry.left}${s.unit} · R ${s.asymmetry.right}${s.unit}`) : null,
+        s.asymmetry ? h('span', { class: 'chip' }, `Average L ${s.asymmetry.left}${s.unit} · R ${s.asymmetry.right}${s.unit}`) : null,
         checkIns ? h('span', { class: 'pill band-warning' }, `${checkIns} check-in${checkIns > 1 ? 's' : ''}`) : null),
       leg.el,
       h('div', { class: 'field' }, h('span', { class: 'field-label' }, 'Pain during this exercise'), scale),
@@ -1096,7 +1105,7 @@ class LiveSession {
       this.feedbackScale = null;
       this.results[this.idx] = { ...s, ...fb, legSymptoms: leg.leg, events: this.events, stoppedEarly: false };
       if (fb.painRating >= 8) return this.highPainStop();
-      if (leg.leg) return this.legStop();
+      if (leg.leg) return this.legStop({ finished: true });
       this.next();
     });
   }
@@ -1149,14 +1158,14 @@ class LiveSession {
               h('td', {}, `${r.reps}/${r.targetReps}`),
               h('td', {}, r.formScore == null ? '—' : `${r.formScore}%`),
               h('td', {}, r.peakBest == null ? '—' : `${r.peakBest}${r.unit}`),
-              hasSensor ? h('td', {}, r.sensor ? (r.sensor.lumbarFlexMax != null ? `${r.sensor.lumbarFlexMax}°` : `trunk ${r.sensor.trunkFlexMax}°`) : '—') : null,
+              hasSensor ? h('td', {}, !r.skipped && r.sensor && (r.sensor.lumbarFlexMax || r.sensor.trunkFlexMax) ? (r.sensor.lumbarFlexMax ? `${r.sensor.lumbarFlexMax}°` : `trunk ${r.sensor.trunkFlexMax}°`) : '—') : null,
               h('td', {}, painPill(r.painRating)),
               h('td', {}, r.events?.length ? String(r.events.length) : '—')))))) : h('p', { class: 'muted' }, 'No exercises were completed.')),
         h('div', { class: 'stack' },
           saved ? h('section', { class: 'card stack' }, h('h2', {}, 'How is your back now?'), painScale(null, (n) => { painAfter = n; this.updateSession(saved.id, { painAfter }); })) : null,
-          this.cfg.demo
-            ? h('div', { class: 'callout info' }, icon('info'), h('p', { class: 'small' }, 'Demo sessions aren’t saved. Do the safety check and start a real session to begin tracking.'))
-            : null,
+          results.some((r) => r.legSymptoms) ? h('div', { class: 'callout danger' }, icon('alert'), h('p', { class: 'small' },
+            'You reported new or spreading leg symptoms, so that exercise rests for at least 2 days. If they keep spreading, or haven’t settled within a day or two, see a doctor or physio. Get urgent help for numbness around the groin or genitals, bladder or bowel changes, or a leg getting weaker.')) : null,
+          this.cfg.demo ? h('div', { class: 'callout info' }, icon('info'), h('p', { class: 'small' }, demoNote())) : null,
           !this.cfg.demo && !saved ? h('div', { class: 'callout info' }, icon('info'), h('p', { class: 'small' }, 'Nothing was saved, because no exercise was done.')) : null,
           saved ? h('a', { class: 'btn btn-primary btn-lg', href: `#/history/${saved.id}` }, 'Done') : h('a', { class: 'btn btn-primary btn-lg', href: '#/dashboard' }, 'Back to dashboard'),
           clip ? h('a', { class: 'btn', href: '#/recordings' }, icon('record', 15), 'Open in Recordings') : null,
@@ -1232,6 +1241,14 @@ class LiveSession {
     this.diag.event(this.now(), this.spec?.id ?? null, { type: 'slow-tracking', fps });
     toast(`Tracking is slow on this computer (${fps} fps), so reps and cues may be off. In Settings, choose the Lite model and turn off facial strain.`, { tone: 'warn', ms: 9000 });
   }
+}
+
+/** What to say after a demo, depending on where the user is with the safety check. */
+function demoNote() {
+  const st = screeningStatus(store.get().profile?.screening);
+  if (st.testDemoOnly) return 'Demo sessions aren’t saved. Thank you for trying it: for this test round, that’s all we ask.';
+  if (st.done && !st.emergency) return 'Demo sessions aren’t saved. Start a session from the dashboard to track your own.';
+  return 'Demo sessions aren’t saved. Do the safety check and start a real session to begin tracking.';
 }
 
 const SKIP_REASONS = [['couldnt-see', 'It couldn’t see me properly'], ['hurts', 'It hurts'], ['too-hard', 'Too hard'], ['unclear', 'Not sure what to do'], ['other', 'Something else']];

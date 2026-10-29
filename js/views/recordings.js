@@ -1,6 +1,6 @@
 // Recordings: the local clip library, the camera-vs-sensor analysis, and consent management.
 
-import { h, icon, toast, fmtDate, fmtTime, emptyState } from '../ui.js';
+import { h, icon, toast, fmtDate, fmtTime, emptyState, copyText } from '../ui.js';
 import { listClips, getClip, deleteClip, saveClip, storageUsage } from '../data/clipstore.js';
 import { clipFromJSON } from '../data/clip.js';
 import { analyzeClip, ICC_MIN_SPREAD } from '../analysis/agreement.js';
@@ -67,14 +67,7 @@ export function render(root) {
       h('li', {}, 'On the phone, open ', h('a', { href: url, target: '_blank', rel: 'noopener' }, url.replace(/^https:\/\//, '')), ' and follow the spoken steps.'),
       h('li', {}, 'When it says “Recording”, start a session here with “Record a training clip” on. Standing exercises only.'),
       h('li', {}, 'Send the phone’s file to this computer, then choose “Add phone data” on the session’s clip.')),
-    h('div', { class: 'row' }, h('button', { class: 'btn btn-sm', type: 'button', onclick: async () => {
-      try {
-        await navigator.clipboard.writeText(url);
-        toast('Link copied');
-      } catch {
-        toast(url);
-      }
-    } }, 'Copy phone link')),
+    h('div', { class: 'row' }, h('button', { class: 'btn btn-sm', type: 'button', onclick: () => copyText(url, { done: 'Link copied. Send it to your phone.', title: 'Phone link' }) }, 'Copy phone link')),
     h('p', { class: 'small faint' }, 'Turn on automatic date and time on both devices. The phone sits higher on the back than a dedicated sensor would, and its accuracy hasn’t been bench-tested yet.'));
 
   root.append(h('div', { class: 'grid grid-main' }, h('div', { class: 'stack' }, listBox, analysisBox), h('div', { class: 'stack' }, consentBox, phoneCard, h('section', { class: 'card stack' }, h('h2', {}, 'How to record'),
@@ -98,13 +91,9 @@ export function render(root) {
     listBox.replaceChildren(h('section', { class: 'card' },
       h('div', { class: 'section-title' }, h('h2', {}, 'Clips'), h('p', {}, `${clips.length} saved`)),
       clips.length ? h('div', { class: 'table-scroll' }, h('table', { class: 'data-table' },
-        h('thead', {}, h('tr', {}, ['Recorded', 'Length', 'Exercises', 'Sensors', 'Size', ''].map((t) => h('th', {}, t)))),
+        h('thead', {}, h('tr', {}, ['Recorded', '', 'Length', 'Exercises', 'Sensors', 'File size'].map((t) => h('th', {}, t)))),
         h('tbody', {}, clips.map((c) => h('tr', {},
           h('td', {}, `${fmtDate(c.createdAt)} ${fmtTime(c.createdAt)}`, c.simulated ? h('span', { class: 'pill', style: { marginLeft: '6px' } }, 'simulated') : null),
-          h('td', {}, `${Math.round(c.durationS)} s`),
-          h('td', {}, c.exercises.map((id) => byId[id]?.name ?? id).join(', ')),
-          h('td', {}, c.sensors.length ? c.sensors.join(' + ') : '—'),
-          h('td', {}, mb(c.bytes)),
           h('td', {}, h('div', { class: 'row', style: { gap: '6px', flexWrap: 'nowrap' } },
             c.sensors.length ? h('button', { class: 'btn btn-sm btn-primary', type: 'button', onclick: () => analyse(c.id) }, 'Analyse')
               : h('label', { class: 'btn btn-sm btn-primary', title: 'Merge a recording from the phone sensor page into this clip' }, 'Add phone data',
@@ -115,7 +104,11 @@ export function render(root) {
               await deleteClip(c.id);
               analysisBox.replaceChildren();
               refresh();
-            } }, 'Delete'))))))))
+            } }, 'Delete'))),
+          h('td', {}, `${Math.round(c.durationS)} s`),
+          h('td', {}, c.exercises.map((id) => byId[id]?.name ?? id).join(', ')),
+          h('td', {}, c.sensors.length ? c.sensors.join(' + ') : '—'),
+          h('td', {}, mb(c.bytes)))))))
         : emptyState('No clips yet', 'Switch on “Record a training clip” in a session (then add your phone’s data), or create a simulated clip to see the analysis.')));
     const consent = clipConsent();
     consentBox.replaceChildren(h('section', { class: 'card stack' },
@@ -176,6 +169,7 @@ export function render(root) {
           h('td', {}, e.reps.icc == null ? '—' : e.reps.spread < ICC_MIN_SPREAD ? h('span', { title: `Reps were all about the same depth (sensor SD under ${ICC_MIN_SPREAD}°), too little variation for an ICC.` }, 'n/a') : e.reps.icc),
           h('td', {}, e.frames.mae != null ? `${e.frames.mae}°` : '—'),
           h('td', {}, e.frames.ccc ?? '—')))))) : h('p', { class: 'muted' }, 'No exercise had enough paired camera and sensor data.'),
+      plainWords(rows, phone ? 'phone' : 'sensor'),
       h('p', { class: 'small faint' }, 'Bias = camera minus sensor. Limits of agreement: 95% of differences fall between them. Rep peaks are the main comparison because neighbouring frames are not independent. ICC needs reps of different depths; it shows n/a when they were all alike. Plots: small dots are frames, large dots are rep peaks.'));
     if (phone) {
       card.append(h('div', { class: 'row' }, h('button', { class: 'btn btn-sm btn-ghost', type: 'button', onclick: async () => {
@@ -191,6 +185,15 @@ export function render(root) {
       card.append(plot);
     }
     analysisBox.replaceChildren(card);
+  }
+
+  /** The headline numbers in everyday words, for people who don't read Bland–Altman plots. */
+  function plainWords(rows, ref) {
+    const lines = rows.filter(([, e]) => e.reps.n >= 3).map(([exId, e]) => {
+      const b = e.reps.bias;
+      return h('li', {}, `${byId[exId]?.name ?? exId}: on average the camera read ${Math.abs(b)}° ${b >= 0 ? 'more' : 'less'} than the ${ref}; for 95% of reps the difference was between ${e.reps.loa[0]}° and ${e.reps.loa[1]}°.`);
+    });
+    return lines.length ? h('div', {}, h('h3', {}, 'In plain words'), h('ul', { class: 'small', style: { margin: '6px 0 0', paddingLeft: '18px' } }, lines)) : null;
   }
 
   function stat(label, value, sub) {

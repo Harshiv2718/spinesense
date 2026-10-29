@@ -85,6 +85,7 @@ export function render(root) {
     h('input', { type: 'checkbox', checked: draft.noPain, onchange: (e) => {
       draft.noPain = e.target.checked;
       for (const el of painFields) el.hidden = draft.noPain;
+      error.textContent = '';
     } }),
     h('span', {}, NO_PAIN.label));
 
@@ -120,7 +121,9 @@ export function render(root) {
 
   form.addEventListener('submit', (e) => {
     e.preventDefault();
-    if (!screeningAnswered(draft)) {
+    // An emergency sign must save (and lock) even if the pain questions are still blank.
+    const emergency = EMERGENCY_FLAGS.some((f) => draft.redFlags[f.id]);
+    if (!emergency && !screeningAnswered(draft)) {
       error.textContent = `Please answer where the pain is, how long you’ve had it, and how bad it is now, or tick “${NO_PAIN.label}”.`;
       return;
     }

@@ -21,7 +21,7 @@ export function render(root) {
       h('h2', {}, 'Coaching'),
       toggle('Spoken coaching', st.voiceCoach, (v) => set('voiceCoach', v), 'Counts reps, cues your form and checks in when something looks uncomfortable.'),
       toggle('Listen for "ow" and "stop"', st.voiceInput, (v) => set('voiceInput', v),
-        Listener.supported ? 'Uses your browser’s speech recognition. In Chrome and Edge, audio is sent to the browser maker’s speech service.' : 'Not supported in this browser. Try Chrome or Edge.'),
+        Listener.supported ? 'Sends your microphone audio for the whole session, including anything else said in the room, to Google (Chrome) or Microsoft (Edge). Off by default.' : 'Not supported in this browser. Try Chrome or Edge.'),
       h('div', { class: 'field' }, h('label', {}, 'Camera'), camSelect, h('small', {}, 'Camera names appear after you allow camera access once.'))),
     h('section', { class: 'card stack' },
       h('h2', {}, 'Discomfort detection'),

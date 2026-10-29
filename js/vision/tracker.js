@@ -273,11 +273,21 @@ export class SimTracker {
     loop();
   }
 
+  /** Freezes the demo person during pauses and check-ins, so the exercise carries on where it stopped. */
+  hold(on) {
+    const now = this.lastNow ?? performance.now() / 1000;
+    if (on && this.heldAt == null) this.heldAt = now;
+    else if (!on && this.heldAt != null) {
+      this.t0 += now - this.heldAt;
+      this.heldAt = null;
+    }
+  }
+
   /** One simulated frame at time `now` (seconds). Exposed so tests can step time manually. */
   tick(now) {
     if (!this.person || !this.onFrame) return;
     this.lastNow = now;
-    const fr = this.person.frame(now - this.t0);
+    const fr = this.person.frame((this.heldAt ?? now) - this.t0);
     const lm = this.smooth.apply(fr.lm, now);
     const world = this.smoothW.apply(fr.world, now);
     this.onFrame({

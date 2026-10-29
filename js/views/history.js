@@ -57,7 +57,7 @@ function detail(root, s) {
         mini('Form', e.formScore == null ? '—' : `${e.formScore}%`),
         mini('Best range', e.peakBest == null ? '—' : `${e.peakBest}${e.unit}`)),
       e.sensor ? h('p', { class: 'small muted' }, `Back sensor (${e.sensor.mode === 'dual' ? 'two sensors' : 'one sensor'}): trunk bend up to ${e.sensor.trunkFlexMax ?? '—'}°${e.sensor.lumbarFlexMax != null ? `, lower back up to ${e.sensor.lumbarFlexMax}°` : ''}`) : null,
-      e.asymmetry ? h('p', { class: 'small muted' }, `Left ${e.asymmetry.left}${e.unit} · Right ${e.asymmetry.right}${e.unit} (${e.asymmetry.pct}% difference)`) : null,
+      e.asymmetry ? h('p', { class: 'small muted' }, `Average left ${e.asymmetry.left}${e.unit} · right ${e.asymmetry.right}${e.unit} (${e.asymmetry.pct}% difference)`) : null,
       Object.keys(e.formCounts ?? {}).length ? h('p', { class: 'small muted' }, `Form cues: ${Object.entries(e.formCounts).map(([k, n]) => `${k.replace('-', ' ')} ×${n}`).join(', ')}`) : null,
       e.skipped ? h('p', { class: 'small faint' }, 'Skipped') : null,
       e.events?.length

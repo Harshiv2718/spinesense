@@ -239,3 +239,12 @@ test('consistency stats and harder-exercise ranking from sample data', () => {
   assert.ok(stats.pain7 < stats.painPrev7, 'sample pain should be improving');
   assert.equal(painTriggers(sessions, 30, NOW)[0].id, 'hip-hinge');
 });
+
+test('an emergency sign saves and locks even with the pain questions left blank', async () => {
+  const { buildScreening, screeningStatus, screeningAnswered, EMERGENCY_FLAGS } = await import('../js/program.js');
+  const answers = { redFlags: { [EMERGENCY_FLAGS[0].id]: true }, cautions: {}, noPain: false, location: null, duration: null, painNow: null, aggravators: [] };
+  assert.equal(screeningAnswered(answers), false, 'the pain questions really are blank');
+  const st = screeningStatus(buildScreening(answers));
+  assert.equal(st.emergency, true);
+  assert.equal(st.testDemoOnly, false, 'the emergency message wins over demo-only');
+});

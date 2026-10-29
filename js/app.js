@@ -43,6 +43,7 @@ function renderNav(active) {
   nav.replaceChildren(...navItems().map(([id, label, ic, cls]) => h('a', {
     href: `#/${id}`,
     class: cls,
+    'aria-label': label,
     'aria-current': id === active ? 'page' : null,
     onclick: (e) => {
       if (window.__sessionLive && id !== 'session' && !confirm('Leave the session? Progress from this session will not be saved.')) e.preventDefault();

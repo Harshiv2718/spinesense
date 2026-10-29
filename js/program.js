@@ -376,19 +376,23 @@ export function sampleSessions(now = Date.now()) {
       unit: byId[id].unit, formScore: form, painRating: Math.max(0, painBefore - 2), feel: 'right', events: [], formCounts: {}, ...extra,
     });
     const lvl = k > 0.55 ? 1 : 0;
+    const bend = Math.round(13 + 9 * k);
+    const weaker = Math.round(bend * (0.78 + 0.18 * k));
+    // Gentle is the easiest level, so a check-in there makes the movement smaller instead of dropping a level.
+    const easier = (level) => (level > 0 ? 'regressed' : 'eased');
     const exercises = [
       ex('arm-raise', 1, 8, 8, Math.round(128 + 20 * k), 92),
-      ex('side-bend', lvl, 10 + lvl * 6, 10 + lvl * 6, Math.round(13 + 9 * k), Math.round(78 + 15 * k), { asymmetry: { left: Math.round(14 + 9 * k), right: Math.round(11 + 10 * k), pct: Math.round(22 - 18 * k) } }),
+      ex('side-bend', lvl, 10 + lvl * 6, 10 + lvl * 6, bend, Math.round(78 + 15 * k), { asymmetry: { left: bend, right: weaker, pct: Math.round(((bend - weaker) / bend) * 100) } }),
       ex('hip-hinge', lvl, 6 + lvl * 2, 6 + lvl * 2, Math.round(24 + 22 * k), Math.round(70 + 22 * k)),
       ex('glute-bridge', lvl, 6 + lvl * 2, 6 + lvl * 2, Math.round(17 + 10 * k), Math.round(80 + 12 * k)),
       ex('bird-dog', 0, 6, 6, Math.round(72 + 14 * k), Math.round(74 + 18 * k)),
     ];
     if (i === 2 || i === 5) {
-      exercises[2].events = [{ t: 41, level: 'moderate', signals: ['range', 'guard'], rating: 5, action: 'regressed' }];
+      exercises[2].events = [{ t: 41, level: 'moderate', signals: ['range', 'guard'], rating: 5, action: easier(lvl) }];
       exercises[2].painRating = 5;
     }
     if (i === 3) exercises[1].events = [{ t: 22, level: 'mild', signals: ['face'], action: 'eased' }];
-    if (i === 7) exercises[4].events = [{ t: 30, level: 'moderate', signals: ['shake', 'guard'], rating: 4, action: 'regressed' }];
+    if (i === 7) exercises[4].events = [{ t: 30, level: 'moderate', signals: ['shake', 'guard'], rating: 4, action: easier(0) }];
     sessions.push({
       id: `sample-${i}`,
       sample: true,

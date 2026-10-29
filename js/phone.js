@@ -250,7 +250,7 @@ function watch() {
 function tick() {
   watch();
   if (!live.elapsed) return;
-  const s = (performance.now() - rec.anchor.perfMs) / 1000;
+  const s = (performance.now() - (rec.calibratedAtMs ?? rec.anchor.perfMs)) / 1000;
   live.elapsed.textContent = mmss(s);
   const a = rec.angles();
   if (a?.calibrated) live.angle.textContent = `${Math.round(a.flex)}°`;

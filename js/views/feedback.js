@@ -2,7 +2,7 @@
 // Feedback goes to public GitHub issues, so nothing here ever adds health details to it.
 
 import { store } from '../store.js';
-import { h, icon, toast } from '../ui.js';
+import { h, icon, copyText } from '../ui.js';
 import { VERSION, buildInfo } from '../version.js';
 import { screeningStatus } from '../program.js';
 import { testConsent, askTestConsent } from './consent.js';
@@ -15,11 +15,11 @@ export const FEEDBACK_URL = 'https://github.com/Harshiv2718/spinesense/issues/ne
 const TASKS = [
   { id: 'safety', label: 'Find out whether SpineSense thinks it’s OK for you to exercise today', auto: (s) => screeningStatus(s.profile?.screening).done },
   { id: 'demo', label: 'Without turning on your camera, see what a session will be like' },
-  { id: 'setup', label: 'Set up your camera so SpineSense can see you for a standing exercise' },
-  { id: 'camera', label: 'Do two or three standing exercises, only as far as is comfortable', auto: (s) => s.sessions.some((x) => !x.sample && x.exercises?.some((e) => e.reps > 0)) },
+  { id: 'setup', label: 'Set up your camera so SpineSense can see you for a standing exercise', camera: true },
+  { id: 'camera', camera: true, label: 'Do two or three standing exercises, only as far as is comfortable', auto: (s) => s.sessions.some((x) => !x.sample && x.exercises?.some((e) => e.reps > 0)) },
   { id: 'pain', label: 'Pretend an exercise starts to hurt: press “I feel pain” and answer what it asks (no real pain needed)' },
   { id: 'skip', label: 'You don’t want to do an exercise: move past it, then finish the session' },
-  { id: 'review', label: 'Find out what SpineSense suggests for next time, and how today compares with earlier sessions' },
+  { id: 'review', camera: true, label: 'Find out what SpineSense suggests for next time, and how today compares with earlier sessions' },
   { id: 'privacy', label: 'Find out whether your video is stored or sent anywhere' },
   { id: 'phone', label: 'Optional: check the camera against your phone strapped to your back', optional: true },
   { id: 'feedback', label: 'Send your feedback (about 5 minutes)', href: FEEDBACK_URL, external: true },
@@ -41,15 +41,6 @@ export async function deviceInfo() {
     `CPU cores: ${navigator.hardwareConcurrency ?? 'unknown'}; WebGL2: ${gl ? 'yes' : 'no'}`,
     `Camera API: ${navigator.mediaDevices?.getUserMedia ? 'yes' : 'no'}; speech: ${'speechSynthesis' in window ? 'yes' : 'no'}`,
   ].join('\n');
-}
-
-async function copy(text, done) {
-  try {
-    await navigator.clipboard.writeText(text);
-    toast(done);
-  } catch {
-    toast('Couldn’t copy automatically. Select the text and copy it yourself.', { tone: 'warn' });
-  }
 }
 
 function consentCard() {
@@ -78,7 +69,7 @@ export function render(root) {
       }),
     });
     const link = t.href ? h('a', { href: t.href, ...(t.external ? { target: '_blank', rel: 'noopener' } : {}) }, t.label) : h('span', {}, t.label);
-    return h('li', { class: t.optional ? 'optional' : null }, h('label', { class: 'choice' }, box, link), auto ? h('span', { class: 'small faint' }, 'done') : null);
+    return h('li', { class: t.optional ? 'optional' : null }, h('label', { class: 'choice' }, box, link), auto ? h('span', { class: 'small faint' }, 'done') : t.camera ? h('span', { class: 'small faint' }, 'needs a webcam') : null);
   }));
 
   const info = h('pre', { class: 'device-info' }, 'Collecting…');
@@ -90,14 +81,18 @@ export function render(root) {
 
   root.append(h('div', { class: 'grid grid-main' },
     h('div', { class: 'stack' },
-      h('section', { class: 'card stack' }, h('div', { class: 'section-title' }, h('h2', {}, 'What to try'), h('p', {}, 'Ticks are saved in this browser')), checklist),
+      h('section', { class: 'card stack' }, h('div', { class: 'section-title' }, h('h2', {}, 'What to try'), h('p', {}, 'Ticks are saved in this browser')),
+        h('p', { class: 'small muted' }, screeningStatus(state.profile?.screening).testDemoOnly
+          ? 'Your safety check sent you to the demo for this test round, so skip the tasks marked “needs a webcam”.'
+          : 'No webcam? Skip the tasks marked “needs a webcam”.'),
+        checklist),
       h('section', { class: 'card stack' }, h('h2', {}, 'Send feedback'),
         h('p', { class: 'small muted' }, 'The feedback form is on GitHub (you’ll need a free account). It’s public, so please leave out your name, health details and pain ratings.'),
         h('div', { class: 'row' },
           h('a', { class: 'btn btn-primary', href: FEEDBACK_URL, target: '_blank', rel: 'noopener' }, 'Open the feedback form'),
-          h('button', { class: 'btn', type: 'button', onclick: async () => copy(await deviceInfo(), 'Device details copied. Paste them into the form.') }, 'Copy device details')),
+          h('button', { class: 'btn', type: 'button', onclick: async () => copyText(await deviceInfo(), { done: 'Device details copied. Paste them into the form.', title: 'Device details' }) }, 'Copy device details')),
+        h('p', { class: 'small muted' }, 'The form asks you to sign in to GitHub (free). No GitHub account? Send your notes and the device details below to whoever invited you to test.'),
         info,
-        h('p', { class: 'small faint' }, 'No GitHub account? Send your notes and the device details above to whoever invited you to test.'),
         h('p', { class: 'small muted' }, 'If tracking went wrong, open “Tracking details” during a session (or use the button on the session summary) and choose “Copy test report”. It holds tracking numbers, the app version and your browser and screen size: no images, nothing about pain or discomfort. Read it before you paste it.'),
         h('p', { class: 'small muted' }, 'Clip, phone and data-export files can contain your pain answers or body measurements. Send those only privately to the person running the test, never in the form.'))),
     h('div', { class: 'stack' },

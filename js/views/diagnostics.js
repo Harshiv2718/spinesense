@@ -101,7 +101,8 @@ export class Diagnostics {
     return JSON.stringify({
       meta: { ...this.meta, when: this.meta.when.slice(0, 10) },
       results: (results ?? []).filter(Boolean).map((r) => ({ id: r.id, reps: `${r.reps}/${r.targetReps}`, aborts: r.aborts, form: r.formScore, best: r.peakBest, skipped: r.skipped ? r.skipReason ?? true : false })),
-      events: this.events.filter((e) => !privateEvent(e.type)),
+      // Rep durations include pauses and check-ins, which would hint at pain: leave them out.
+      events: this.events.filter((e) => !privateEvent(e.type)).map(({ dur, ...e }) => e),
       columns: keep.map((i) => COLS[i]),
       samples: this.samples.map((row) => keep.map((i) => row[i])),
     });

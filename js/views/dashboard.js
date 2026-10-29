@@ -54,8 +54,8 @@ export function render(root) {
 
   root.append(h('div', { class: 'page-head' },
     h('div', {}, h('h1', {}, `${greeting()}${state.profile?.name ? `, ${state.profile.name}` : ''}`),
-      h('p', {}, `${fmtDate(Date.now(), { weekday: 'long', day: 'numeric', month: 'long' })} · ${stats.sessions7 ? `${stats.sessions7} session${stats.sessions7 === 1 ? '' : 's'} in the last 7 days` : 'Let’s get moving'}`)),
-    h('div', { class: 'row' },
+      h('p', {}, `${fmtDate(Date.now(), { weekday: 'long', day: 'numeric', month: 'long' })} · ${status.emergency ? 'Please get medical help before exercising' : stats.sessions7 ? `${stats.sessions7} session${stats.sessions7 === 1 ? '' : 's'} in the last 7 days` : 'Let’s get moving'}`)),
+    status.emergency ? null : h('div', { class: 'row' },
       h('a', { class: 'btn', href: '#/session?demo=1' }, icon('play', 16), 'Demo (no camera)'),
       h('a', { class: 'btn btn-primary', href: '#/session' }, icon('session', 18), 'Start session'))));
 
