@@ -1,5 +1,10 @@
 // Spoken coaching (speechSynthesis, offline) and optional voice commands (SpeechRecognition).
 
+// When the coach last finished speaking, so the listener can ignore its own voice through the speakers.
+let lastSpeechEnd = -Infinity;
+const markEnd = () => { lastSpeechEnd = performance.now(); };
+const coachTalking = () => globalThis.speechSynthesis?.speaking || performance.now() - lastSpeechEnd < 1500;
+
 export class Voice {
   constructor(enabled = true) {
     this.enabled = enabled && 'speechSynthesis' in window;
@@ -33,6 +38,7 @@ export class Voice {
     const u = new SpeechSynthesisUtterance(text);
     if (this.voice) u.voice = this.voice;
     u.rate = 1.02;
+    u.onend = u.onerror = markEnd;
     speechSynthesis.speak(u);
   }
 
@@ -43,6 +49,7 @@ export class Voice {
     const u = new SpeechSynthesisUtterance(text);
     if (this.voice) u.voice = this.voice;
     u.rate = 1.1;
+    u.onend = u.onerror = markEnd;
     speechSynthesis.speak(u);
   }
 
@@ -51,7 +58,7 @@ export class Voice {
   }
 }
 
-const NUMBERS = { zero: 0, oh: 0, none: 0, one: 1, two: 2, to: 2, too: 2, three: 3, four: 4, for: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10 };
+const NUMBERS = { zero: 0, one: 1, two: 2, to: 2, too: 2, three: 3, four: 4, for: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10 };
 
 /** Listens for "ow", "ouch", "pain", "stop", "pause", "continue" and numbers 0–10. */
 export class Listener {
@@ -74,7 +81,10 @@ export class Listener {
     rec.interimResults = true;
     rec.lang = 'en-US';
     rec.onresult = (e) => {
-      for (let i = e.resultIndex; i < e.results.length; i++) this.parse(e.results[i][0].transcript.toLowerCase());
+      // Laptop speakers feed the coach's own words back into the mic ("say continue", "from zero to ten"),
+      // so while it talks only "stop" and "ow" count: hearing those by mistake is harmless.
+      const echo = coachTalking();
+      for (let i = e.resultIndex; i < e.results.length; i++) this.parse(e.results[i][0].transcript.toLowerCase(), { echo });
     };
     rec.onerror = (e) => {
       if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
@@ -109,11 +119,12 @@ export class Listener {
     this.onCommand(kind, value);
   }
 
-  parse(text) {
+  parse(text, { echo = false } = {}) {
     if (/\b(stop|pause|enough|wait)\b/.test(text)) this.fire('stop');
     if (/\b(o+w+|ouch|pain|painful|hurts?|hurting|argh+|ahh+)\b/.test(text)) this.fire('pain');
+    if (echo) return;
     if (/\b(continue|resume|carry on|ready|go on)\b/.test(text)) this.fire('resume');
-    const m = text.match(/\b(10|[0-9]|zero|oh|none|one|two|three|four|five|six|seven|eight|nine|ten)\b/);
+    const m = text.match(/\b(10|[0-9]|zero|one|two|three|four|five|six|seven|eight|nine|ten)\b/);
     if (m) this.fire('number', /\d/.test(m[1]) ? Number(m[1]) : NUMBERS[m[1]]);
   }
 

@@ -248,7 +248,7 @@ export const EXERCISES = [
     alternating: true,
     unit: '°',
     metricLabel: 'Knee pull',
-    gesturePause: true,
+    gesturePause: false, // lying down, the hands sit above the head in the image
     why: 'Gentle flexion often eases a stiff, achy lower back — especially if standing or walking is what aggravates it.',
     steps: [
       'Lie on your back, knees bent, feet flat, side-on to the camera.',
@@ -294,7 +294,7 @@ export const EXERCISES = [
     kind: 'hold',
     unit: '°',
     metricLabel: 'Hip lift',
-    gesturePause: true,
+    gesturePause: false, // lying down, the hands sit above the head in the image
     why: 'Strong glutes share the load with the lower back. Bridges are one of the most common exercises in back-pain programmes.',
     steps: [
       'Lie on your back, knees bent, feet flat and hip-width apart, side-on to the camera.',

@@ -1,0 +1,144 @@
+name: Tester feedback
+description: Tell us how testing SpineSense went. This form is public, so please leave out your name and any health details.
+title: "[Test] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for testing SpineSense! It takes about 5 minutes.
+
+        **This issue is public** and linked to your GitHub account. Please don't include your name, pain ratings, symptoms, photos or videos of yourself, or any clip, phone or data-export file. Describe what the app did, not your health.
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy check
+      options:
+        - label: I haven't included my name, health details, pain ratings, photos, or any clip, phone or data-export file.
+          required: true
+  - type: textarea
+    id: device
+    attributes:
+      label: Device details
+      description: On the app's Help & feedback page, press "Copy device details" and paste here. It holds the app version, browser and screen size only.
+      render: text
+    validations:
+      required: true
+  - type: checkboxes
+    id: tried
+    attributes:
+      label: What did you try?
+      options:
+        - label: Safety check
+        - label: Demo (no camera)
+        - label: Camera session
+        - label: Tried the pain check-in (no real pain needed)
+        - label: Dashboard and History
+        - label: Phone as a back sensor
+  - type: dropdown
+    id: tracking
+    attributes:
+      label: Did the camera track you reliably?
+      options:
+        - "Yes, the whole time"
+        - Mostly
+        - Sometimes
+        - "No"
+        - I didn't use the camera
+    validations:
+      required: true
+  - type: dropdown
+    id: reps
+    attributes:
+      label: Did it count your reps correctly?
+      options:
+        - "Yes, every time"
+        - Missed or added a few
+        - Often wrong
+        - I didn't do a camera session
+  - type: dropdown
+    id: ease
+    attributes:
+      label: Overall, how easy or difficult was SpineSense to use?
+      description: 1 = very difficult, 7 = very easy
+      options: ["1", "2", "3", "4", "5", "6", "7"]
+    validations:
+      required: true
+  - type: textarea
+    id: stuck
+    attributes:
+      label: Where did you get stuck, confused, or surprised?
+      description: Which screen, what you expected, and what happened instead.
+  - type: textarea
+    id: liked
+    attributes:
+      label: What worked well?
+  - type: dropdown
+    id: again
+    attributes:
+      label: Would you recommend it to someone with back pain?
+      options:
+        - Definitely
+        - Probably
+        - Not sure
+        - Probably not
+        - Definitely not
+  - type: markdown
+    attributes:
+      value: |
+        **Ten quick statements** (the standard System Usability Scale, Brooke 1986). 1 = strongly disagree, 5 = strongly agree. Optional, but they let us compare test rounds.
+  - type: dropdown
+    id: sus1
+    attributes:
+      label: "1. I think that I would like to use this system frequently."
+      options: ["1", "2", "3", "4", "5"]
+  - type: dropdown
+    id: sus2
+    attributes:
+      label: "2. I found the system unnecessarily complex."
+      options: ["1", "2", "3", "4", "5"]
+  - type: dropdown
+    id: sus3
+    attributes:
+      label: "3. I thought the system was easy to use."
+      options: ["1", "2", "3", "4", "5"]
+  - type: dropdown
+    id: sus4
+    attributes:
+      label: "4. I think that I would need the support of a technical person to be able to use this system."
+      options: ["1", "2", "3", "4", "5"]
+  - type: dropdown
+    id: sus5
+    attributes:
+      label: "5. I found the various functions in this system were well integrated."
+      options: ["1", "2", "3", "4", "5"]
+  - type: dropdown
+    id: sus6
+    attributes:
+      label: "6. I thought there was too much inconsistency in this system."
+      options: ["1", "2", "3", "4", "5"]
+  - type: dropdown
+    id: sus7
+    attributes:
+      label: "7. I would imagine that most people would learn to use this system very quickly."
+      options: ["1", "2", "3", "4", "5"]
+  - type: dropdown
+    id: sus8
+    attributes:
+      label: "8. I found the system very cumbersome to use."
+      options: ["1", "2", "3", "4", "5"]
+  - type: dropdown
+    id: sus9
+    attributes:
+      label: "9. I felt very confident using the system."
+      options: ["1", "2", "3", "4", "5"]
+  - type: dropdown
+    id: sus10
+    attributes:
+      label: "10. I needed to learn a lot of things before I could get going with this system."
+      options: ["1", "2", "3", "4", "5"]
+  - type: textarea
+    id: report
+    attributes:
+      label: Test report (optional)
+      description: If tracking went wrong, open "Tracking details" in a session or the session summary, choose "Copy test report" and paste it here. It holds tracking numbers, the app version and your browser, with no images and nothing about pain or discomfort. Read it before you paste it.
+      render: json

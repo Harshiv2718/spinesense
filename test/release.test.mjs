@@ -31,7 +31,7 @@ test('the public site contains the app and none of the private folders', async (
   const out = await mkdtemp(join(tmpdir(), 'spinesense-site-'));
   try {
     const { files } = await buildSite(out);
-    for (const needed of ['index.html', 'js/app.js', 'css/app.css', 'docs/hardware.md', '.nojekyll']) assert.ok(files.includes(needed), `missing ${needed}`);
+    for (const needed of ['index.html', 'phone.html', 'js/app.js', 'js/phone.js', 'css/app.css', 'docs/hardware.md', '.nojekyll']) assert.ok(files.includes(needed), `missing ${needed}`);
     for (const f of files) assert.ok(!/^(research_notes|reports|active|\.claude|test|tools|firmware)\//.test(f), `private file published: ${f}`);
   } finally {
     await rm(out, { recursive: true, force: true });

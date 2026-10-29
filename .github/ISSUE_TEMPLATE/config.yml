@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Try SpineSense
+    url: https://harshiv2718.github.io/spinesense/#/feedback
+    about: The live app, with the tester checklist and the device details to paste into feedback.

@@ -59,6 +59,17 @@ export function render(root) {
       h('a', { class: 'btn', href: '#/session?demo=1' }, icon('play', 16), 'Demo (no camera)'),
       h('a', { class: 'btn btn-primary', href: '#/session' }, icon('session', 18), 'Start session'))));
 
+  if (!state.tester?.introDismissed) {
+    const banner = h('div', { class: 'callout info tester-banner' }, icon('info'),
+      h('div', { class: 'spacer' }, h('strong', {}, 'You’re testing an early version. '), 'Thanks for trying it! See what to try and how to send feedback.'),
+      h('a', { class: 'btn btn-sm btn-primary', href: '#/feedback' }, 'Help & feedback'),
+      h('button', { class: 'btn btn-sm btn-ghost', type: 'button', 'aria-label': 'Dismiss', onclick: () => {
+        store.update((s) => { s.tester = { ...(s.tester ?? { done: {} }), introDismissed: true }; });
+        banner.remove();
+      } }, icon('x', 15)));
+    root.append(banner);
+  }
+
   if (hasSample) {
     root.append(h('div', { class: 'callout info sample-banner' }, icon('info'),
       h('div', { class: 'spacer' }, h('strong', {}, 'You’re looking at sample data. '), 'It shows how the dashboard fills in after a few weeks of sessions.'),
@@ -81,6 +92,10 @@ export function render(root) {
     root.append(h('div', { class: 'callout warn', style: { marginBottom: '16px' } }, icon('safety'),
       h('div', { class: 'spacer' }, h('strong', {}, 'Time to redo your safety check. '), status.outdated ? 'It now asks each warning sign separately.' : 'Your last one is more than 4 weeks old.'),
       h('a', { class: 'btn btn-sm', href: '#/safety' }, 'Redo safety check')));
+  } else if (status.testDemoOnly) {
+    root.append(h('div', { class: 'callout info', style: { marginBottom: '16px' } }, icon('safety'),
+      h('div', { class: 'spacer' }, h('strong', {}, 'During this test round, please use the demo instead of exercising. '), 'Your safety check mentioned something that needs a clinician’s view first. Thank you for helping.'),
+      h('a', { class: 'btn btn-sm btn-primary', href: '#/session?demo=1' }, 'Watch the demo')));
   } else if (status.blocked) {
     root.append(h('div', { class: 'callout danger', style: { marginBottom: '16px' } }, icon('alert'),
       h('div', {}, h('strong', {}, 'Please see a doctor before exercising. '), `Your safety check flagged: ${status.unclearedFlags.map((f) => f.text.toLowerCase()).join('; ')}. `,
@@ -132,8 +147,8 @@ export function render(root) {
     h('div', { class: 'section-title' }, h('h2', {}, 'Form quality'), h('p', {}, 'Reps without a form correction, last 12 sessions')),
     barList(formRows, { max: 100, color: '--series-1', empty: 'Form scores appear after your first session.' })));
 
-  // Today's plan
-  if (plan) {
+  // Today's plan (none in the test round for people sent to the demo)
+  if (plan && !plan.demoOnly) {
     const planCard = h('section', { class: 'card' },
       h('div', { class: 'section-title' }, h('h2', {}, 'Today’s plan'), h('p', {}, `About ${plan.minutes} min · ${plan.items.length} exercises`)));
     if (plan.notes.length) planCard.append(h('div', { class: 'callout warn', style: { marginBottom: '8px' } }, icon('info'), h('div', { class: 'small' }, plan.notes.map((n) => h('p', {}, n)))));

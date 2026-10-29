@@ -1,3 +1,4 @@
+import { store } from '../store.js';
 import { h, icon, modal, toast } from '../ui.js';
 import { hub } from '../sensors/hub.js';
 import { BleSensor } from '../sensors/ble.js';
@@ -5,6 +6,7 @@ import { SimSensor, simCalibration } from '../sensors/sim.js';
 import { ROLE_LABEL } from '../sensors/protocol.js';
 import { spread } from '../sensors/posture.js';
 import { benchReference, benchMeasure, benchSummary } from '../analysis/bench.js';
+import { clipToJSON } from '../data/clip.js';
 
 const fmtDeg = (v) => {
   if (v == null || Number.isNaN(v)) return '—';
@@ -104,6 +106,7 @@ function placementFigure() {
 }
 
 export function render(root) {
+  if (!store.get().settings.hardwareSensors) return hardwareOff(root);
   const supported = BleSensor.supported;
   root.append(h('div', { class: 'page-head' },
     h('div', {}, h('h1', {}, 'Back sensors'),
@@ -245,6 +248,22 @@ export function render(root) {
     clearInterval(timer);
     hub.removeEventListener('change', onChange);
   };
+}
+
+function hardwareOff(root) {
+  root.append(h('div', { class: 'page-head' }, h('div', {}, h('h1', {}, 'Back sensors'),
+    h('p', {}, 'Bluetooth back sensors are turned off. You don’t need one to use SpineSense.'))));
+  root.append(h('section', { class: 'card stack', style: { maxWidth: '640px' } },
+    h('ul', { class: 'small muted', style: { margin: 0, paddingLeft: '18px' } },
+      h('li', {}, 'To see back-sensor feedback without hardware, try the ', h('a', { href: '#/session?demo=1' }, 'demo'), ': the simulated person wears two virtual sensors.'),
+      h('li', {}, 'To check the camera against a real sensor, use your phone: see ', h('a', { href: '#/recordings' }, 'Recordings'), '.'),
+      h('li', {}, 'Have a SpineSense Motion sensor? Turn on ', h('a', { href: '#/settings' }, 'Settings → Back-sensor hardware'), '.'))));
+}
+
+/** Clips leave the device without pain answers, and only after a reminder of where they may go. */
+export function downloadClip(clip) {
+  if (!confirm('This file holds your body landmarks and session timings (no video, no pain answers). Send it only privately to the person running the test, never in a public GitHub issue. Download it?')) return;
+  download(`spinesense-${clip.id}.json`, clipToJSON(clip, { share: true }));
 }
 
 export function download(filename, data) {

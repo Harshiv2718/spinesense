@@ -3,17 +3,25 @@
 
 import { h, icon, toast, modal } from '../ui.js';
 import { frontalness, trunkTilt, lateralTilt, facingSide } from '../core/geometry.js';
+import { VERSION, buildInfo } from '../version.js';
 
 const SAMPLE_EVERY = 0.5; // s
 const MAX_SAMPLES = 480; // ~4 minutes
 const COLS = ['t', 'mode', 'ex', 'phase', 'repState', 'value', 'target', 'reps', 'side', 'front', 'tilt', 'lean', 'minVis', 'face', 'faceZ', 'disc', 'fps', 'msg', 'sensorTrunk', 'sensorLumbar'];
+
+// Reports get pasted into public bug reports, so nothing in them may reveal pain or discomfort: no
+// check-in answers or events, no face or discomfort scores, no stopped-for-pain markers.
+const PRIVATE = new Set(['rating', 'leg', 'pain', 'painRating']);
+const PRIVATE_COLS = new Set(['face', 'faceZ', 'disc']);
+const privateEvent = (type) => type.startsWith('pain') || type.startsWith('discomfort');
 
 const r2 = (x) => (x == null || Number.isNaN(x) ? null : Math.round(x * 100) / 100);
 
 export class Diagnostics {
   constructor(meta) {
     this.t0 = null;
-    this.meta = { app: 'SpineSense', when: new Date().toISOString(), ua: navigator.userAgent, ...meta };
+    this.meta = { app: 'SpineSense', version: VERSION, when: new Date().toISOString(), ua: navigator.userAgent, ...meta };
+    buildInfo().then((b) => { this.meta.build = b.sha; });
     this.samples = [];
     this.events = [];
     this.lastSample = -Infinity;
@@ -80,6 +88,7 @@ export class Diagnostics {
     const { type, ...rest } = ev;
     const slim = {};
     for (const [k, v] of Object.entries(rest)) {
+      if (PRIVATE.has(k)) continue;
       if (k === 'rep') Object.assign(slim, { peak: r2(v.peak), dur: r2(v.duration), limb: v.limb, issues: v.issues });
       else slim[k] = typeof v === 'number' ? r2(v) : v;
     }
@@ -88,12 +97,13 @@ export class Diagnostics {
   }
 
   report(results) {
+    const keep = COLS.map((c, i) => (PRIVATE_COLS.has(c) ? -1 : i)).filter((i) => i >= 0);
     return JSON.stringify({
-      meta: this.meta,
-      results: (results ?? []).filter(Boolean).map((r) => ({ id: r.id, level: r.levelName, reps: `${r.reps}/${r.targetReps}`, aborts: r.aborts, form: r.formScore, best: r.peakBest, pain: r.painRating, stopped: !!r.stoppedEarly, skipped: !!r.skipped, flags: r.events?.length ?? 0 })),
-      events: this.events,
-      columns: COLS,
-      samples: this.samples,
+      meta: { ...this.meta, when: this.meta.when.slice(0, 10) },
+      results: (results ?? []).filter(Boolean).map((r) => ({ id: r.id, reps: `${r.reps}/${r.targetReps}`, aborts: r.aborts, form: r.formScore, best: r.peakBest, skipped: r.skipped ? r.skipReason ?? true : false })),
+      events: this.events.filter((e) => !privateEvent(e.type)),
+      columns: keep.map((i) => COLS[i]),
+      samples: this.samples.map((row) => keep.map((i) => row[i])),
     });
   }
 
@@ -101,10 +111,10 @@ export class Diagnostics {
     const text = this.report(results ?? this.results?.());
     try {
       await navigator.clipboard.writeText(text);
-      toast('Test report copied. Paste it into the chat.');
+      toast('Test report copied. Paste it into your feedback.');
     } catch {
       const ta = h('textarea', { readonly: true, style: { width: '100%', height: '240px', fontFamily: 'monospace', fontSize: '11px' } }, text);
-      const dlg = modal(h('div', { class: 'stack' }, h('h2', {}, 'Test report'), h('p', { class: 'muted small' }, 'Copy everything below and paste it into the chat.'), ta,
+      const dlg = modal(h('div', { class: 'stack' }, h('h2', {}, 'Test report'), h('p', { class: 'muted small' }, 'Copy everything below and paste it into your feedback. It holds tracking numbers, the app version and your browser: no images, nothing about pain or discomfort.'), ta,
         h('div', { class: 'actions' }, h('button', { class: 'btn btn-primary', type: 'button', onclick: () => dlg.close() }, 'Done'))), { label: 'Test report' });
       ta.select();
     }

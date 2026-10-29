@@ -17,6 +17,7 @@ The target pipeline for SpineSense: what runs where, how data flows, how models 
 │  1 CAPTURE      Webcam ─► MediaPipe Pose (33 pts) + Face (52 blendshapes)                [Built] │
 │                 BLE back sensors ─► SensorHub (upper/lower IMU, 50 Hz)                   [Built] │
 │                 ESP32 sensor firmware (compiles in CI, not yet run on hardware)     [Unverified] │
+│                 Phone as stand-in upper sensor (records to file, merged offline)         [Built] │
 │                 User input: safety check, pain 0–10, leg symptoms, next-day              [Built] │
 │  2 SIGNAL       One-Euro smoothing · visibility & tracking gates · sensor freshness      [Built] │
 │                 Camera-to-IMU time alignment (frame-callback time, clock fit)            [Built] │
@@ -53,6 +54,7 @@ The target pipeline for SpineSense: what runs where, how data flows, how models 
 | 1 | Pose + face capture | `js/vision/tracker.js` | Built | MediaPipe |
 | 1 | Back sensors over Web Bluetooth | `js/sensors/{ble,hub}.js`, `firmware/` | Built (browser, simulator-tested) / **Unverified** (firmware: compiles in CI, not yet run on hardware) | SlimeVR-Tracker-ESP |
 | 2 | Smoothing and gating | `js/core/filters.js`, engine gates | Built | One-Euro; **Sports2D/Pose2Sim** filtering options |
+| 1 | Phone as a stand-in upper sensor | `phone.html`, `js/phone.js`, `js/sensors/phone.js`, `js/analysis/phonemerge.js` | Built (simulator-tested; not yet run on a real phone) | W3C DeviceOrientation; the hub's calibration wizard |
 | 2 | Camera-to-IMU time alignment | `js/sensors/timesync.js`, `tracker.js`, `hub.js` | Built (simulator-tested) | Lower-envelope clock fit (as in NTP-style one-way sync); cross-correlation |
 | 3 | Calibration | engine baseline, `discomfort.js`, `sensors/posture.js` | Built | Clinical dual-inclinometer method |
 | 4 | Angle features | `js/core/geometry.js` | Built | **Sports2D** segment angles, plane-of-motion warnings |
@@ -127,7 +129,7 @@ Tier A is thin: its Kinect sets are skeleton-only and none covers hip hinge, bri
 
 ```
 spinesense/
-├── index.html, css/, js/          # the web app (static, no build step)
+├── index.html, phone.html, css/, js/   # the web app and the phone sensor page (static, no build step)
 │   ├── app.js, store.js, program.js, ui.js, charts.js, figures.js
 │   ├── core/ sensors/ vision/ coach/   # logic (features.js: Next), BLE + hub + timesync, MediaPipe, voice
 │   ├── data/ analysis/            # clip.v1 recorder + IndexedDB library; agreement stats, plots, bench, simulator
@@ -136,7 +138,7 @@ spinesense/
 ├── server.mjs                     # dev server (the camera needs localhost or HTTPS)
 ├── models/, ml/, tools/           # *.onnx + manifest (Next); Python pipeline (Next); build-site, check-models, validate-clips
 ├── firmware/spinesense-motion/    # ESP32 firmware (compiles in CI; not yet run on hardware)
-├── test/                          # node --test (53 tests today)
+├── test/                          # node --test (81 tests today)
 ├── docs/                          # architecture, hardware, sensor-protocol, platform-brainstorm,
 │                                  #   validation (+ plots); hazards, data-handling (Next)
 ├── reports/, research_notes/      # research report, evidence base

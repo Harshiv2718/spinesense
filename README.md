@@ -21,7 +21,11 @@ Then open http://localhost:5173 and allow camera access. Browsers only allow the
 
 No webcam handy? **Demo (no camera)** on the dashboard runs a simulated person through the exercises. Use **Simulate pain on next rep** to watch the discomfort detection respond.
 
-Run the tests with `npm test` (53 tests: exercise engine, discomfort detector, safety rules, sensor maths, time alignment, clip format, agreement statistics, and the release checks).
+Run the tests with `npm test` (81 tests: exercise engine, discomfort detector, safety rules, sensor maths, time alignment, clip format, agreement statistics, the phone sensor, storage, test-report privacy, and the release checks).
+
+## Help test it
+
+No hardware needed. Open the live demo's **Help & feedback** page for what to try and the feedback form. [docs/testing.md](docs/testing.md) explains how a test round runs: who can take part, what the app enforces during the round, and how to read the results.
 
 ## Deploy your own demo (GitHub Pages)
 
@@ -66,6 +70,7 @@ Webcam ─┬─ MediaPipe Pose (33 body points, 3D) ─► One-Euro smoothing �
 | `firmware/` | ESP32 firmware (M5StickC Plus2 or ESP32 + MPU6050): fusion + BLE streaming |
 | `js/views/` | Dashboard, live session, exercise library, history, sensors, recordings, safety check, settings |
 | `tools/` | Site build (allowlist), model licence gate, validation report generator |
+| `phone.html`, `js/phone.js` | Phone sensor page: guided calibration, recording, and sending the file to the computer |
 
 ### Back sensors (optional)
 
@@ -76,13 +81,15 @@ Strap one or two cheap motion sensors (ESP32 + IMU, about $6–20 each) to your 
 - A 15-second calibration learns how each sensor is strapped on, so orientation doesn't matter.
 - **Training clips** save landmarks plus raw sensor readings (no video) to the **Recordings** page, after you agree to it once. Sensor readings then become accurate labels for training better camera-only models.
 
-Try it without hardware: **Sensors → Try simulated sensors**, or the demo session, which can wear simulated sensors and **Simulate rounded lower back**. Hardware, wiring and flashing: [docs/hardware.md](docs/hardware.md). Protocol: [docs/sensor-protocol.md](docs/sensor-protocol.md).
+**No sensor? Use your phone.** Open [phone.html](https://harshiv2718.github.io/spinesense/phone.html) on your phone and strap it to your upper back. It talks you through calibration and records how your trunk tilts. Afterwards, **Add phone data** on the session's clip in Recordings lines the two up and compares them. It's for checking the camera, not live feedback.
+
+Try it without hardware: the demo session wears simulated sensors (try **Simulate rounded lower back**). The Sensors page and the Bluetooth options appear once you turn on **Settings → Back-sensor hardware**, so people testing without hardware never see them. Hardware, wiring and flashing: [docs/hardware.md](docs/hardware.md). Protocol: [docs/sensor-protocol.md](docs/sensor-protocol.md).
 
 ### Validation: how close is the camera to the sensor?
 
 [docs/validation.md](docs/validation.md) describes the method and holds the results:
 
-1. **Bench-test the sensor** against known angles (Sensors → Bench test).
+1. **Bench-test the sensor** against known angles (Sensors → Bench test, with hardware sensors turned on in Settings). No sensor yet? A phone on your back can stand in for it.
 2. **Line up the clocks.** A clock fit removes Bluetooth jitter and crystal drift, then cross-correlation finds the camera-to-sensor offset.
 3. **Compare** the camera's trunk angle with the sensor, exercise by exercise: bias, Bland–Altman limits of agreement, ICC and concordance.
 
@@ -105,7 +112,7 @@ Overhead arm raise, standing side bend, standing hip hinge, sit to stand, single
 
 ### Privacy
 
-Video is processed on-device and never stored or uploaded. The page downloads the MediaPipe engine and models from cdn.jsdelivr.net and storage.googleapis.com, and a Content Security Policy blocks it from contacting any other host. Sessions, pain ratings and settings live in the browser's localStorage (unencrypted), and you can export or delete them in Settings. Training clips are recorded only after you agree to it. They are stored in the browser's IndexedDB on this device and never uploaded, and withdrawing consent deletes them all. The optional "listen for ow/stop" feature uses the browser's speech service, which in Chrome and Edge sends audio to the browser maker's servers. It is off by default.
+Video is processed on-device and never stored or uploaded. The page downloads the pinned MediaPipe engine from cdn.jsdelivr.net and the models from Google's model folder on storage.googleapis.com, sends no referrer, and a Content Security Policy blocks it from contacting anything else. Those hosts, and GitHub Pages, see your IP address and browser like any website, never your video or answers. Sessions, pain ratings and settings live in the browser's localStorage (unencrypted), and you can export or delete them in Settings (Delete all data also removes clips). Training clips are recorded only after you agree to it. They are stored in the browser's IndexedDB on this device and never uploaded, and withdrawing consent deletes them all; a downloaded clip leaves out pain answers. The optional "listen for ow/stop" feature is the one exception to the policy above: Chrome and Edge send the microphone audio for the whole session to Google's or Microsoft's speech service. It is off by default. The test report you can copy holds tracking numbers, the app version and your browser, with nothing about pain or discomfort.
 
 ### Known limits
 

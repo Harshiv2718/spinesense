@@ -6,11 +6,12 @@
 import { cp, mkdir, rm, readdir, stat, writeFile } from 'node:fs/promises';
 import { join, resolve, relative, sep, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { VERSION } from '../js/version.js';
 
 const ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
 
 /** Everything the app needs at runtime, plus the public docs it links to. */
-export const ALLOW = ['index.html', 'css', 'js', 'docs', 'models'];
+export const ALLOW = ['index.html', 'phone.html', 'css', 'js', 'docs', 'models'];
 
 /** Never published, even if someone adds them to ALLOW by mistake. */
 export const DENY = ['research_notes', 'reports', 'active', '.claude', 'test', 'tools', 'firmware', 'ml', 'node_modules', '.git', '.github'];
@@ -45,6 +46,8 @@ export async function buildSite(outDir = join(ROOT, '_site')) {
     if (await exists(src)) await cp(src, join(out, entry), { recursive: true });
   }
   await writeFile(join(out, '.nojekyll'), ''); // serve files as-is (no Jekyll processing)
+  // Which commit is live, so tester reports can name the exact build.
+  await writeFile(join(out, 'build.json'), JSON.stringify({ version: VERSION, sha: process.env.GITHUB_SHA?.slice(0, 7) ?? 'local', builtAt: new Date().toISOString() }));
   const files = (await listFiles(out)).map((f) => relative(out, f).split(sep).join('/'));
   const leaked = files.filter((f) => DENY.includes(f.split('/')[0]) || /(^|\/)\.(env|git)/.test(f));
   if (leaked.length) throw new Error(`Private files in the build: ${leaked.join(', ')}`);

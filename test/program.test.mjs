@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   todaysPlan, applyProgression, applyNextDay, pendingNextDay, computeStats, initialProgress, screeningStatus,
-  painTriggers, sampleSessions, SCREENING_VERSION,
+  painTriggers, sampleSessions, screeningAnswered, buildScreening, SCREENING_VERSION, TEST_ROUND,
 } from '../js/program.js';
 
 const DAY = 86400000;
@@ -11,6 +11,8 @@ const iso = (msAgo = 0) => new Date(NOW - msAgo).toISOString();
 const screening = (over = {}) => ({ version: SCREENING_VERSION, date: iso(), redFlags: {}, cautions: {}, clearances: {}, location: 'back', duration: 'subacute', painNow: 4, aggravators: [], ...over });
 const stateWith = (sc) => ({ profile: { screening: sc }, progress: initialProgress(sc), sessions: [] });
 const goodEx = (id, over = {}) => ({ id, reps: 6, targetReps: 6, formScore: 90, trackingQuality: 0.95, painRating: 1, feel: 'right', ...over });
+// Safety check form answers, as the safety view collects them.
+const answers = (over = {}) => ({ redFlags: {}, cautions: {}, cleared: {}, noPain: false, location: null, duration: null, painNow: null, aggravators: [], ...over });
 
 // ---------- red flags ----------
 
@@ -56,6 +58,86 @@ test('cautions without a clinician OK restrict the plan to Gentle and block leve
   assert.deepEqual(changes, []);
   const cleared = stateWith(screening({ cautions: { surgery: true }, clearances: { surgery: iso() } }));
   assert.equal(todaysPlan(cleared, { now: NOW }).restricted, false);
+});
+
+// ---------- no back pain, and redoing the check ----------
+
+test('"no back pain right now" completes the safety check with pain 0 and the standard plan, nothing location-driven', () => {
+  // Earlier answers (pain below the knee, sitting aggravates) are left over in the form but must not count.
+  const a = answers({ noPain: true, location: 'leg', aggravators: ['sitting', 'bending'] });
+  assert.equal(screeningAnswered(answers()), false);
+  assert.equal(screeningAnswered(a), true);
+  const sc = buildScreening(a, NOW);
+  assert.equal(sc.painNow, 0);
+  assert.equal(sc.location, null);
+  assert.deepEqual(sc.aggravators, []);
+  const st = screeningStatus(sc, NOW);
+  assert.equal(st.done, true);
+  assert.equal(st.blocked, false);
+  assert.equal(st.needsRescreen, false);
+  const plan = todaysPlan(stateWith(sc), { now: NOW });
+  assert.deepEqual(plan.notes, []);
+  assert.deepEqual(plan.skipped, []);
+  assert.ok(plan.items.some((i) => i.id === 'knee-to-chest'));
+  assert.ok(plan.items.every((i) => i.repScale === 1 && i.reasons.length === 0));
+  // Defence in depth: a stored no-pain screening with stray location answers still gets no location notes.
+  const stray = todaysPlan(stateWith({ ...sc, location: 'leg', aggravators: ['sitting'] }), { now: NOW });
+  assert.deepEqual(stray.notes, []);
+  assert.ok(stray.items.some((i) => i.id === 'knee-to-chest'));
+});
+
+test('"no back pain right now" never bypasses the warning signs', () => {
+  for (const id of ['saddle', 'bladder', 'bowel', 'sexual', 'weakness']) {
+    const st = screeningStatus(buildScreening(answers({ noPain: true, redFlags: { [id]: true } }), NOW), NOW);
+    assert.equal(st.emergency, true, id);
+    assert.equal(st.blocked, true, id);
+  }
+  const doctor = screeningStatus(buildScreening(answers({ noPain: true, redFlags: { trauma: true } }), NOW), NOW);
+  assert.equal(doctor.blocked, true);
+  assert.deepEqual(doctor.unclearedFlags.map((f) => f.id), ['trauma']);
+  const caution = screeningStatus(buildScreening(answers({ noPain: true, cautions: { pregnant: true } }), NOW), NOW);
+  assert.equal(caution.restricted, true);
+});
+
+test('a redone safety check with no warning signs clears an emergency from the session quick check', () => {
+  const st = stateWith(screening({ sessionEmergency: iso(DAY) }));
+  assert.equal(screeningStatus(st.profile.screening, NOW).emergency, true);
+  // The safety view saves the fresh screening in place of the old one.
+  st.profile.screening = buildScreening(answers({ noPain: true }), NOW);
+  assert.equal(st.profile.screening.sessionEmergency, undefined);
+  const after = screeningStatus(st.profile.screening, NOW);
+  assert.equal(after.emergency, false);
+  assert.equal(after.blocked, false);
+  // Redone with an emergency sign still ticked, it stays locked.
+  assert.equal(screeningStatus(buildScreening(answers({ noPain: true, redFlags: { bladder: true } }), NOW), NOW).emergency, true);
+});
+
+// ---------- test round ----------
+
+test('test round: any see-a-doctor sign or caution means demo only, even with a clearance', { skip: !TEST_ROUND && 'only during the test round' }, () => {
+  const doctor = stateWith(screening({ redFlags: { trauma: true }, clearances: { trauma: iso() } }));
+  const st = screeningStatus(doctor.profile.screening, NOW);
+  assert.equal(st.blocked, false, 'the clearance itself is still valid');
+  assert.equal(st.testDemoOnly, true);
+  const plan = todaysPlan(doctor, { now: NOW });
+  assert.equal(plan.demoOnly, true);
+  assert.deepEqual(plan.items, []);
+  assert.ok(plan.notes.some((n) => /use the demo instead of exercising/.test(n)));
+  assert.equal(screeningStatus(screening({ cautions: { osteo: true }, clearances: { osteo: iso() } }), NOW).testDemoOnly, true);
+  // Self-reported clearances are not saved during the test round.
+  assert.deepEqual(buildScreening(answers({ noPain: true, redFlags: { cancer: true }, cleared: { cancer: true } }), NOW).clearances, {});
+  // An emergency still wins over demo only.
+  const emergency = screeningStatus(screening({ redFlags: { bladder: true, trauma: true } }), NOW);
+  assert.equal(emergency.emergency, true);
+  assert.equal(emergency.testDemoOnly, false);
+});
+
+test('a clean safety check is not demo only', () => {
+  const st = stateWith(screening());
+  assert.equal(screeningStatus(st.profile.screening, NOW).testDemoOnly, false);
+  const plan = todaysPlan(st, { now: NOW });
+  assert.equal(plan.demoOnly, undefined);
+  assert.ok(plan.items.length > 0);
 });
 
 // ---------- today's plan ----------

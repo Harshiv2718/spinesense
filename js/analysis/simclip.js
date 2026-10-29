@@ -38,6 +38,7 @@ export async function simulateClip({ exercises = ['hip-hinge', 'side-bend', 'glu
     capture: { source: 'simulated', tasksVersion: 'simulated', poseModel: 'SimPerson', poseDelegate: 'none', aspect: SIM_ASPECT, videoSize: [1280, 720], cameraDelay },
     plan: exercises.map((id) => `${id}@${level}`),
   });
+  rec.clip.clock = { perfS: t, epochMs: Date.now() }; // simulated time starts at t
   const results = [];
   const STEP = 1 / 150; // base tick: sensors every 3 ticks (50 Hz), camera every 5 ticks (30 Hz)
   for (const id of exercises) {

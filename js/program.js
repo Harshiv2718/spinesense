@@ -2,6 +2,10 @@
 
 import { EXERCISES, byId } from './core/exercises.js';
 
+// Unsupervised user-test round: anyone with a see-a-doctor sign or a caution watches the demo instead of exercising.
+export const TEST_ROUND = true;
+export const TEST_DEMO_MESSAGE = 'During this test round, please use the demo instead of exercising. Thank you for helping.';
+
 // Possible cauda equina syndrome or severe nerve compression. These can NEVER be overridden:
 // the app shows only the emergency message until the user redoes the safety check without them.
 export const EMERGENCY_FLAGS = [
@@ -52,6 +56,9 @@ export const DURATIONS = [
   { id: 'chronic', label: 'More than 3 months' },
 ];
 
+// Answers the pain questions for someone without back pain (pain now 0). The warning signs are still asked.
+export const NO_PAIN = { id: 'none', label: 'I don’t have back pain right now' };
+
 export const SCREENING_VERSION = 2;
 const DAY = 86400000;
 export const CLEARANCE_DAYS = 30;
@@ -85,20 +92,57 @@ export function screeningStatus(screening, now = Date.now()) {
   const unclearedCautions = cautions.filter((c) => !clearanceValid(screening, c.id, now));
   const outdated = (screening.version ?? 1) < SCREENING_VERSION;
   const stale = (now - Date.parse(screening.date)) / DAY > RESCREEN_DAYS;
+  const emergency = emergencies.length > 0;
   return {
     done: true,
-    emergency: emergencies.length > 0,
+    emergency,
     emergencies,
     flags,
     unclearedFlags,
-    blocked: emergencies.length > 0 || unclearedFlags.length > 0,
+    blocked: emergency || unclearedFlags.length > 0,
     cautions,
     restricted: unclearedCautions.length > 0,
     unclearedCautions,
+    // Test round: any see-a-doctor sign or caution means demo only, whatever clearance is recorded. An emergency still wins.
+    testDemoOnly: TEST_ROUND && !emergency && (flags.length > 0 || cautions.length > 0),
     outdated,
     stale,
     needsRescreen: outdated || stale,
     irritability: screening.painNow >= 7 ? 'high' : screening.painNow >= 4 ? 'moderate' : 'low',
+  };
+}
+
+/** Whether the safety check has the answers it needs. "No back pain right now" stands in for the pain questions only. */
+export function screeningAnswered(answers) {
+  return !!answers.noPain || (!!answers.location && !!answers.duration && answers.painNow != null);
+}
+
+/**
+ * The screening saved from the safety check answers. It is always built fresh, so a session emergency
+ * never carries over: redoing the check is the only way to clear that lock.
+ */
+export function buildScreening(answers, now = Date.now()) {
+  const at = new Date(now).toISOString();
+  const ticked = (bag) => Object.fromEntries(Object.entries(bag ?? {}).filter(([, v]) => v));
+  const redFlags = ticked(answers.redFlags);
+  const cautions = ticked(answers.cautions);
+  const clearances = {};
+  // Clearances are self-reported, so the unsupervised test round ignores them.
+  for (const it of TEST_ROUND ? [] : [...DOCTOR_FLAGS, ...CAUTIONS]) {
+    if ((redFlags[it.id] || cautions[it.id]) && answers.cleared?.[it.id]) clearances[it.id] = at;
+  }
+  const noPain = !!answers.noPain;
+  return {
+    version: SCREENING_VERSION,
+    date: at,
+    redFlags,
+    cautions,
+    clearances,
+    noPain,
+    location: noPain ? null : answers.location,
+    duration: noPain ? null : answers.duration,
+    painNow: noPain ? 0 : answers.painNow,
+    aggravators: noPain ? [] : [...(answers.aggravators ?? [])],
   };
 }
 
@@ -138,6 +182,7 @@ export function todaysPlan(state, { painToday, now = Date.now() } = {}) {
   const sc = state.profile?.screening;
   if (!sc) return null;
   const status = screeningStatus(sc, now);
+  if (status.testDemoOnly) return { demoOnly: true, items: [], skipped: [], minutes: 0, restricted: status.restricted, notes: [TEST_DEMO_MESSAGE] };
   const pain = painToday ?? sc.painNow;
   if (pain >= 8) {
     return {
@@ -148,7 +193,8 @@ export function todaysPlan(state, { painToday, now = Date.now() } = {}) {
       notes: ['Pain of 8/10 or more: today is a rest day, not an exercise day. Find a comfortable position and move gently around the house if you can. If the pain is severe and not easing, spreads down a leg, or comes with numbness or bladder or bowel changes, get medical help.'],
     };
   }
-  const agg = new Set(sc.aggravators ?? []);
+  // No back pain right now: the standard plan, with nothing tailored to where it hurts or what aggravates it.
+  const agg = new Set(sc.noPain ? [] : sc.aggravators ?? []);
   const flexSensitive = agg.has('bending') || agg.has('sitting');
   const extSensitive = agg.has('standing') || agg.has('walking');
   const flare = worseRecently(state, now);
@@ -157,7 +203,7 @@ export function todaysPlan(state, { painToday, now = Date.now() } = {}) {
   if (pain >= 7) notes.push('Your pain is high today, so everything is Gentle with fewer reps. Gentle movement still helps.');
   if (flare) notes.push('Your back was worse after a recent session, so today is lighter. If it isn’t settling within a few days, or leg symptoms spread, see a clinician.');
   if (status.restricted) notes.push(`Gentle levels only until a clinician OKs exercise for you (${status.unclearedCautions.map((c) => c.text.toLowerCase()).join('; ')}).`);
-  if (sc.location === 'leg') notes.push('Pain below the knee can mean an irritated nerve. Keep movements small and stop if leg symptoms spread further down. A physio check is a good idea.');
+  if (!sc.noPain && sc.location === 'leg') notes.push('Pain below the knee can mean an irritated nerve. Keep movements small and stop if leg symptoms spread further down. A physio check is a good idea.');
   if (flexSensitive) notes.push('Bending or sitting aggravates your back, so forward-bending moves stay small.');
 
   const items = [];

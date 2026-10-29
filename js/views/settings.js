@@ -2,6 +2,8 @@ import { store } from '../store.js';
 import { h, icon, toggle, toast } from '../ui.js';
 import { CameraTracker } from '../vision/tracker.js';
 import { Listener } from '../coach/voice.js';
+import { hub } from '../sensors/hub.js';
+import { deleteAllClips } from '../data/clipstore.js';
 
 export function render(root) {
   const st = store.get().settings;
@@ -31,6 +33,12 @@ export function render(root) {
         h('select', { onchange: (e) => set('modelVariant', e.target.value) },
           [['lite', 'Lite: fastest, older laptops'], ['full', 'Full (recommended)'], ['heavy', 'Heavy: most accurate, needs a good GPU']].map(([v, l]) => h('option', { value: v, selected: st.modelVariant === v }, l))))),
     h('section', { class: 'card stack' },
+      h('h2', {}, 'Back-sensor hardware'),
+      toggle('Show hardware sensor options', st.hardwareSensors, (v) => {
+        set('hardwareSensors', v);
+        if (!v) for (const d of hub.list) hub.remove(d.id); // nothing keeps streaming once hidden
+      }, 'For SpineSense Motion Bluetooth sensors (ESP32 boards you build or flash yourself). Leave it off if you don’t have one: the camera, the demo’s simulated sensors and the phone sensor work without it.')),
+    h('section', { class: 'card stack' },
       h('h2', {}, 'Your data'),
       h('p', { class: 'muted small' }, 'Sessions, pain ratings and settings are stored only in this browser. Video is processed on this device and never saved or uploaded.'),
       h('div', { class: 'row' },
@@ -40,10 +48,19 @@ export function render(root) {
           class: 'btn btn-sm btn-danger',
           type: 'button',
           onclick: () => {
-            if (!confirm('Delete all sessions, your safety check and settings? This cannot be undone.')) return;
+            if (!confirm('Delete all sessions, training clips, your safety check and settings? This cannot be undone.')) return;
             store.reset();
-            toast('All data deleted');
-            location.hash = '#/dashboard';
+            try {
+              localStorage.removeItem('spinesense.sensorcal');
+            } catch {
+              /* storage unavailable */
+            }
+            deleteAllClips()
+              .catch(() => {})
+              .finally(() => {
+                toast('All data deleted');
+                location.hash = '#/dashboard';
+              });
           },
         }, icon('trash', 15), 'Delete all data'))),
     h('section', { class: 'card stack' },

@@ -2,6 +2,8 @@
 
 A small motion sensor strapped to your back gives SpineSense accurate lower-back angles, which a webcam can't measure well. One sensor gives trunk angle; two give the true lower-back (lumbar) angle, using the same dual-inclinometer method clinicians use.
 
+No hardware yet? A phone strapped to your upper back can stand in for the upper sensor when checking the camera: see [validation.md, section 4](validation.md#4-no-sensor-yet-use-a-phone). It records to a file rather than streaming live, so it doesn't drive the live hip-hinge feedback.
+
 > Status: the firmware **compiles in CI for both boards** (ESP32 core 3.3.12, M5Unified 0.2.27, arduino-cli 1.5.1), but **has not yet run on real hardware**. The browser side is fully tested with simulated sensors that send identical packets. If you flash a board, the first thing to check is that the Sensors page shows a steady ~50 Hz stream for 10 minutes.
 
 ## Pick your parts
@@ -47,7 +49,7 @@ On the M5StickC Plus2, **button A** cycles the body position (UPPER → LOWER �
 ## Connect
 
 1. Open SpineSense in **Chrome or Edge** (desktop or Android; Safari doesn't support Web Bluetooth).
-2. Go to **Sensors → Connect a sensor**, pick `SpineSense-XXXX`, and set its body position.
+2. Turn on **Settings → Back-sensor hardware → Show hardware sensor options** (it's off by default, so testers without hardware never see it). Then go to **Sensors → Connect a sensor**, pick `SpineSense-XXXX`, and set its body position.
 3. Repeat for the second sensor, then **Calibrate now**: stand still, bend forward and back, bend right and back.
 4. Start a session. The panel shows trunk, pelvis and lower-back angles, and five exercises gain sensor-based form checks.
 

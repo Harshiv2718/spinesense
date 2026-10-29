@@ -326,7 +326,8 @@ select, input[type="text"] {
 .recent-item:first-child { border-top: 0; }
 .recent-item:hover h3 { color: var(--accent-text); }
 .recent-item p { font-size: 12.5px; color: var(--ink-2); }
-.sample-banner { margin-bottom: 18px; }
+.sample-banner, .tester-banner { margin-bottom: 18px; }
+.tester-banner { align-items: center; }
 
 .empty { text-align: center; padding: 36px 20px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
 .empty p { color: var(--ink-2); max-width: 46ch; }
@@ -533,3 +534,28 @@ canvas.trace { width: 100%; height: 140px; display: block; }
 
 /* ---------- recordings ---------- */
 .ba-plot svg { width: 100%; height: auto; max-width: 640px; display: block; }
+
+/* ---------- phone sensor page ---------- */
+body.phone-page { overscroll-behavior: none; }
+.phone { max-width: 520px; margin: 0 auto; padding: 20px 16px 40px; display: flex; flex-direction: column; gap: 16px; }
+.phone-head { display: flex; align-items: center; gap: 12px; }
+.phone-head h1 { font-size: 22px; }
+.phone-mark { display: inline-grid; place-items: center; width: 38px; height: 38px; border-radius: 10px; background: var(--accent); color: var(--accent-ink); }
+.phone-big { font-size: 72px; font-weight: 700; letter-spacing: -0.03em; text-align: center; line-height: 1; font-variant-numeric: tabular-nums; padding: 12px 0; }
+.phone-live { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.phone-live .stat { padding: 14px 16px; border-radius: var(--radius-sm); background: var(--surface); border: 1px solid var(--border); }
+.btn-block { width: 100%; justify-content: center; }
+.hold-btn { position: relative; overflow: hidden; height: 64px; font-size: 18px; touch-action: none; user-select: none; -webkit-user-select: none; }
+.hold-btn .hold-fill { position: absolute; inset: 0 auto 0 0; width: 0; background: color-mix(in srgb, var(--critical) 28%, transparent); }
+.hold-btn.holding .hold-fill { width: 100%; transition: width 1.5s linear; }
+.hold-btn .hold-label { position: relative; }
+.rec-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--critical); animation: rec-pulse 1.2s ease-in-out infinite; }
+@keyframes rec-pulse { 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .rec-dot { animation: none; } }
+
+/* ---------- help & feedback ---------- */
+.checklist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.checklist li { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.checklist li.optional { opacity: 0.85; }
+.checklist input:checked + a, .checklist input:checked + span { color: var(--ink-3); text-decoration: line-through; }
+.device-info { margin: 0; padding: 10px 12px; border-radius: var(--radius-sm); background: var(--surface-2); font-size: 12px; white-space: pre-wrap; word-break: break-word; }

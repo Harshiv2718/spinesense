@@ -9,7 +9,7 @@ Everything here is reproducible. Clips are recorded in the app (Recordings page)
 The sensor is the reference, so its own error must be known first.
 
 - **Equipment:** the sensor, a flat surface, and a way to set known angles: a protractor, a phone level app, or a 3D-printed wedge (30°, 45°, 60°, 90°).
-- **Procedure** (Sensors page, Bench test):
+- **Procedure** (Sensors page → Bench test, after turning on hardware sensors in Settings):
   1. Lay the sensor flat and capture 0°.
   2. Set each rig angle and capture.
   3. Each capture averages 2 s of stillness and is rejected if the sensor moved.
@@ -38,7 +38,26 @@ Camera frames and sensor samples are stamped by different clocks, and Bluetooth 
   - ICC(A,1): two-way, absolute agreement, single measures.
   - Lin's concordance (CCC), MAE and RMSE; frame-level values are secondary.
 
-## 4. Results
+## 4. No sensor yet? Use a phone
+
+A phone strapped to the upper back can stand in for the upper sensor, so the camera can be checked before any hardware arrives.
+
+1. **On the phone,** open `phone.html` from the live demo (https://harshiv2718.github.io/spinesense/phone.html). Browsers only share motion sensors with https pages.
+2. **Strap it on** flat against the upper back, just below the shoulder blades, with a stretchy belt, bandage or snug top. The page talks you through the same calibration as the hardware sensors: stand still, bend forward, lean right.
+3. **Record a session** on the computer with "Record a training clip" switched on. Do standing exercises only, and start with a few hip hinges.
+4. **Merge:** send the phone's file to the computer, then choose **Add phone data** on the session's clip in Recordings.
+
+How the two recordings are lined up (`js/analysis/phonemerge.js`):
+
+- **Wall clocks:** each file stores one moment on both its monotonic clock and its wall clock. That puts the phone's samples on the clip's timeline.
+- **Movement:** wall clocks can disagree by a few seconds, especially on PCs. Cross-correlating the camera's trunk tilt with the phone's tilt over ±30 s finds the difference.
+- **Refinement:** `analyzeClip()` then fine-tunes the remaining offset exactly as it does for the Bluetooth sensors.
+
+In tests, clock errors from −9 s to +25 s were recovered to within one 40 ms grid step, and the clip analysis then left a 5 ms residual.
+
+The phone measures the same thing as the upper sensor: how far the upper back tilts from the standing calibration. Each merged clip records the clock offset and match quality, and the Recordings page shows any warnings, such as gaps or a clock jump during the recording.
+
+## 5. Results
 
 <!-- results:start -->
 ### Simulated run (pipeline check, not real-world accuracy)
@@ -71,10 +90,14 @@ Note: ICC not reported because the reps were all about the same depth (sensor SD
 
 <!-- results:end -->
 
-## 5. Limitations
+## 6. Limitations
 
 - A simulated clip only shows the pipeline works: the simulated person is drawn from the same geometry the camera measures, so near-perfect agreement is expected.
 - The sensor measures segment inclination, not spinal curvature.
 - Two sensors give lumbar angle as upper minus lower, which is the dual-inclinometer method, not a direct measure of the spine.
 - Frame-level statistics overstate the sample size; quote rep-level numbers.
 - Camera accuracy depends on placement, clothing and lighting, so report the conditions with every result.
+- A phone is a stand-in, not the reference:
+  - It sits higher on the back than the T12/L1 sensor position, and it is heavier, so it can bounce.
+  - Its tilt accuracy hasn't been bench-tested here. Check it against a protractor or a level app before quoting phone-based numbers.
+  - Results must say which reference was used.

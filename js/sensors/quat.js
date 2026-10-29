@@ -41,3 +41,21 @@ export function qrotate(q, v) {
   const r = qmul(qmul(q, [0, v[0], v[1], v[2]]), qconj(q));
   return [r[1], r[2], r[3]];
 }
+
+/**
+ * Quaternion (device -> earth, Z up) from a browser deviceorientation event, per the W3C
+ * DeviceOrientation spec (intrinsic Z-X'-Y'' rotations: alpha, beta, gamma in degrees).
+ * The resulting "up" direction is well defined even near beta = ±90°, where alpha and gamma aren't.
+ */
+export function quatFromDeviceOrientation(alpha, beta, gamma) {
+  const x = rad(beta ?? 0) / 2;
+  const y = rad(gamma ?? 0) / 2;
+  const z = rad(alpha ?? 0) / 2;
+  const [cX, cY, cZ, sX, sY, sZ] = [Math.cos(x), Math.cos(y), Math.cos(z), Math.sin(x), Math.sin(y), Math.sin(z)];
+  return [
+    cX * cY * cZ - sX * sY * sZ,
+    sX * cY * cZ - cX * sY * sZ,
+    cX * sY * cZ + sX * cY * sZ,
+    cX * cY * sZ + sX * sY * cZ,
+  ];
+}

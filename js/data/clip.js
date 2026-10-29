@@ -5,14 +5,17 @@
 //   schema: 'clip.v1', id, createdAt, app, simulated,
 //   consent: { version, at },                     // the user's recording consent at the time
 //   capture: { source, tasksVersion, poseModel, poseDelegate, aspect, videoSize },
+//   clock: { perfS, epochMs },                   // the same moment on both clocks, for lining up other devices
 //   plan: ['hip-hinge@1', ...],
 //   frames: { columns: [...], rows: [[tCap, tProc, ex, level, phase, rep, state], ...] },
 //   lm: [Float32Array(33*4)],  world: [Float32Array(33*3) | null]   // raw model output, unfiltered
-//   sensors: [{ id, role, simulated, info, cal, clock }],
+//   sensors: [{ id, role, source?, simulated, info, cal, clock, sync? }],   // source 'phone' when merged from a phone
 //   sensorRaw: { columns: [...], rows: [[role, rx_s, device_ms, tl_s, qw..qz, ax..az], ...] },
 //   events: [{ t, ex, type, ... }],
 //   results: [...]                                // per-exercise summaries from the session
 // }
+
+import { VERSION } from '../version.js';
 
 export const CLIP_SCHEMA = 'clip.v1';
 export const CLIP_MAX_SECONDS = 600;
@@ -21,7 +24,7 @@ export const FRAME_COLUMNS = ['tCap_s', 'tProc_s', 'exercise', 'level', 'phase',
 const r = (v, k = 4) => (v == null ? null : +v.toFixed(k));
 
 export class ClipRecorder {
-  constructor({ capture, consent, plan, app = { name: 'SpineSense', version: '0.2.0' }, simulated = false } = {}) {
+  constructor({ capture, consent, plan, app = { name: 'SpineSense', version: VERSION }, simulated = false } = {}) {
     this.clip = {
       schema: CLIP_SCHEMA,
       id: `clip-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
@@ -30,6 +33,8 @@ export class ClipRecorder {
       simulated,
       consent: consent ?? null,
       capture: capture ?? {},
+      // Frame times use the performance clock; this ties it to wall-clock time so a phone recording can be lined up.
+      clock: { perfS: r(performance.now() / 1000), epochMs: Date.now() },
       plan: plan ?? [],
       frames: { columns: FRAME_COLUMNS, rows: [] },
       lm: [],
@@ -93,7 +98,7 @@ export class ClipRecorder {
 export function summarize(clip) {
   const rows = clip.frames.rows;
   const exercises = [...new Set(rows.map((x) => x[2]).filter(Boolean))];
-  const sensorRoles = (clip.sensors ?? []).filter((s) => s.cal).map((s) => s.role);
+  const sensorRoles = (clip.sensors ?? []).filter((s) => s.cal).map((s) => (s.source === 'phone' ? 'phone' : s.role));
   return {
     id: clip.id,
     createdAt: clip.createdAt,
@@ -107,10 +112,22 @@ export function summarize(clip) {
   };
 }
 
-/** Plain-JSON form for download and offline tools (typed arrays become rounded number arrays). */
-export function clipToJSON(clip) {
+const PAIN_KEYS = ['painRating', 'legSymptoms', 'feel', 'stoppedEarly', 'rating', 'leg'];
+const strip = (o) => Object.fromEntries(Object.entries(o).filter(([k]) => !PAIN_KEYS.includes(k)));
+
+/**
+ * Plain-JSON form for download and offline tools (typed arrays become rounded number arrays).
+ * share: leave out pain and leg-symptom answers, for a copy that leaves this device.
+ */
+export function clipToJSON(clip, { share = false } = {}) {
   return {
     ...clip,
+    ...(share ? {
+      // Each result's events are check-in records and levelChanges show a mid-exercise drop: both reveal pain.
+      results: (clip.results ?? []).map(({ events, levelChanges, ...r }) => strip(r)),
+      events: (clip.events ?? []).filter((e) => !e.type?.startsWith('pain')).map(strip),
+      shared: true,
+    } : {}),
     lm: clip.lm.map((a) => Array.from(a, (v) => +v.toFixed(5))),
     world: clip.world.map((a) => (a ? Array.from(a, (v) => +v.toFixed(5)) : null)),
   };
