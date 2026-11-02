@@ -112,7 +112,7 @@ Tier A is thin: its Kinect sets are skeleton-only and none covers hip hinge, bri
 
 | Store | Content | Where |
 |---|---|---|
-| `spinesense.v1` | Profile, safety check, progress, sessions, settings | **Stays in localStorage** (Built): seven modules use the synchronous `store`, and `index.html` reads the theme before first paint. Next: `migrate(state)` keyed on `version` in `load()` and `importJSON()` (neither checks it today; reject newer versions), and a toast when `setItem` fails (today only `console.warn`) |
+| `spinesense.v1` | Profile, safety check, progress, sessions, settings | **Stays in localStorage** (Built): seven modules use the synchronous `store`, and `index.html` reads the theme before first paint. Open tabs stay in step through the `storage` event, a failed save warns once, and the browser is asked to keep the data (all Built). Next: `migrate(state)` keyed on `version` in `load()` and `importJSON()` (neither checks it today; reject newer versions) |
 | `spinesense.sensorcal` | Per-sensor calibration, 12-hour expiry | localStorage (Built) |
 | Training clips | `clip.v1`: `{schema, consent:{version, at, scope[]}, participant:<random UUID>, env:{app, tasksVision, poseModelSha256, variant, delegate, camera:{w,h,fps}, ua}, sensors:[{role, fw, board, rate, calId}], sync:{offsetMs, corr, method}, frames:[{tCapture, lm33_raw, world33_raw, sensorRaw?}]}` | IndexedDB library, `js/data/{clip,clipstore}.js` (Built): `clip.v1` with a consent record, capture metadata (MediaPipe version, model, delegate, video size), raw and world landmarks as typed arrays, raw sensor packets with device and arrival times, events and results; 10-minute cap; quota errors fall back to download. Still Next: participant UUID, `navigator.storage.persist()`, and keeping pain answers out of clips meant for sharing. A 10-minute clip at 30 fps is about 15–20 MB as JSON |
 | Models | ONNX files + manifest | Static files with the app (Next) |
@@ -138,9 +138,9 @@ spinesense/
 ├── server.mjs                     # dev server (the camera needs localhost or HTTPS)
 ├── models/, ml/, tools/           # *.onnx + manifest (Next); Python pipeline (Next); build-site, check-models, validate-clips
 ├── firmware/spinesense-motion/    # ESP32 firmware (compiles in CI; not yet run on hardware)
-├── test/                          # node --test (81 tests today)
+├── test/                          # node --test (83 tests today)
 ├── docs/                          # architecture, hardware, sensor-protocol, platform-brainstorm,
-│                                  #   validation (+ plots); hazards, data-handling (Next)
+│                                  #   validation (+ plots), testing; hazards, data-handling (Next)
 ├── reports/, research_notes/      # research report, evidence base
 ├── LICENSE (Apache-2.0); THIRD_PARTY_NOTICES.md                                  (notices: Next)
 └── .github/workflows/             # ci.yml, pages.yml
@@ -164,7 +164,7 @@ spinesense/
 ## 11. Operations
 
 - **Observability without a server:** no telemetry. Shadow-mode counters (windows, disagreements, p95 latency, fallbacks, model ids) are kept in IndexedDB and added, numbers only, to the "Copy test report" in `js/views/diagnostics.js` (report Built; counters Next). Pilot users send it voluntarily.
-- **Failures:** camera denied or missing → message (Built); GPU delegate fails → CPU (Built); BLE drops → 5 retries, then "Signal lost" and camera-only (Built); CDN or model fetch fails → retry, then "needs internet on first use" (Next); storage quota exceeded → toast and offer export (Next); model hash, schema or latency failure → `bank = null` (Next).
+- **Failures:** camera denied or missing → message (Built); GPU delegate fails → CPU (Built); BLE drops → 5 retries, then "Signal lost" and camera-only (Built); CDN or model fetch fails or stalls → a clear message after 45 s, with Retry and the demo (Built); camera busy, blocked or stopped mid-session → message, and the session is saved (Built); storage quota exceeded → toast and offer download (Built); model hash, schema or latency failure → `bank = null` (Next).
 - **Accessibility (Next):** HUD readable at 2–3 m (large type, high contrast, no colour-only states); every spoken cue also shown as text; hands-free control (voice and raised-hand pause, both Built) because users are on the floor; `prefers-reduced-motion`; keyboard and ARIA outside the session view, checked with axe-core. **Support:** Chrome/Edge (desktop, Android) for sensors; camera coaching elsewhere only if MediaPipe runs there (untested); no sensors on iOS.
 
 ## 12. Roadmap with portfolio milestones
@@ -174,6 +174,14 @@ spinesense/
 | **1. Ship** | Pages deploy (allowlist), CI with the firmware matrix, root `LICENSE`, README with GIFs of the demo and sensors | Live demo link; green CI badge; both boards compile and one streams 10 minutes with no gaps |
 | **2. Measure** | Time alignment; clip recorder v1 with consent flow and IndexedDB library; reference validation; camera-vs-sensor study | `docs/validation.md` with Bland–Altman plots and the sensor's own error |
 | **3. Learn** | `ml/` pipeline; first model (hip-hinge lumbar estimation from camera, labelled by the sensor) in shadow mode | Model card plus "camera-only lumbar flexion within X° (95% CI, n = …)", or the agreement analysis if n < 15 |
+
+**User-test round (current, between phases 2 and 3).** Testers use the live demo with no hardware. See `docs/testing.md`.
+
+- Bluetooth screens stay in the code but are hidden until `settings.hardwareSensors` is turned on in Settings. Turn it on when the hardware arrives.
+- `TEST_ROUND` in `js/program.js` sends anyone with a see-a-doctor sign or a caution to the demo and switches off self-clearance. Set it to `false` when the round ends.
+- A versioned information sheet (`consent.test` in `js/views/consent.js`) is required before the first camera session.
+- The Help & feedback page (`js/views/feedback.js`) holds the task list. Feedback goes to a public GitHub issue form, so test reports and shared clips carry no pain or discomfort data (`test/report.test.mjs`).
+- A phone can stand in for the upper sensor (`phone.html`, then Add phone data in Recordings). Results must say which reference was used.
 
 ## 13. Not before…
 

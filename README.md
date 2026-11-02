@@ -21,7 +21,7 @@ Then open http://localhost:5173 and allow camera access. Browsers only allow the
 
 No webcam handy? **Demo (no camera)** on the dashboard runs a simulated person through the exercises. Use **Simulate pain on next rep** to watch the discomfort detection respond.
 
-Run the tests with `npm test` (81 tests: exercise engine, discomfort detector, safety rules, sensor maths, time alignment, clip format, agreement statistics, the phone sensor, storage, test-report privacy, and the release checks).
+Run the tests with `npm test` (83 tests: exercise engine, discomfort detector, safety rules, sensor maths, time alignment, clip format, agreement statistics, the phone sensor, storage, test-report privacy, and the release checks).
 
 ## Help test it
 

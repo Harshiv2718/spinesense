@@ -27,6 +27,7 @@ const NAV = [
 
 let cleanup = null;
 let current = 'dashboard';
+let shownUrl = location.href;
 
 // The Bluetooth sensor page stays out of the menu until someone turns hardware on in Settings.
 const navItems = () => NAV.filter(([id]) => id !== 'sensors' || store.get().settings.hardwareSensors);
@@ -45,13 +46,11 @@ function renderNav(active) {
     class: cls,
     'aria-label': label,
     'aria-current': id === active ? 'page' : null,
-    onclick: (e) => {
-      if (window.__sessionLive && id !== 'session' && !confirm('Leave the session? Progress from this session will not be saved.')) e.preventDefault();
-    },
   }, icon(ic, 18), h('span', {}, label))));
 }
 
 function route() {
+  shownUrl = location.href;
   try {
     cleanup?.();
   } catch (e) {
@@ -124,7 +123,14 @@ function browserBanner() {
   slot.append(banner);
 }
 
-window.addEventListener('hashchange', route);
+// Every way of leaving comes through here: menu links, the browser's Back and Forward, typed addresses.
+window.addEventListener('hashchange', () => {
+  if (window.__sessionLive && !confirm('Leave the session? Progress from this session will not be saved.')) {
+    window.history.pushState(null, '', shownUrl); // stay put (pushState doesn't fire hashchange)
+    return;
+  }
+  route();
+});
 let hardwareShown = store.get().settings.hardwareSensors;
 let themeShown = store.get().settings.theme;
 store.subscribe((s) => {

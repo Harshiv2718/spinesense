@@ -1,7 +1,7 @@
 // Runs one exercise: position check → baseline capture → rep/hold counting + form rules.
 // Pure logic (no DOM), so it is unit-tested with synthetic poses.
 
-import { facingSide, allVisible, std } from './geometry.js';
+import { facingSide, allVisible, framingMessage, std } from './geometry.js';
 
 const SETUP_HOLD = 1.2; // s of steady, correct start position before counting begins
 const FORM_PERSIST = 0.7; // s a fault must last before it becomes a cue (webcam angles are noisy)
@@ -128,7 +128,7 @@ export class ExerciseRun {
         this.stableFor = 0;
         this.samples = [];
         this.sensorSamples = [];
-        return out({ message: 'Step back so your whole body is in view', tracking: false });
+        return out({ message: framingMessage(f, spec.required(this.side), 0.5), tracking: false });
       }
       const s = spec.setup(f, this.side);
       if (!s.ok) {

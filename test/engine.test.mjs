@@ -81,3 +81,14 @@ test('regress() drops one level and keeps completed reps', () => {
   ex.setLevel(0);
   assert.equal(ex.regress(), false);
 });
+
+test('out of frame: the message names the missing body part and how to fix it', async () => {
+  const { framingMessage, L } = await import('../js/core/geometry.js');
+  const showing = (...hidden) => ({ vis: (i) => (hidden.includes(i) ? 0.1 : 0.9) });
+  const body = [L.lShoulder, L.rShoulder, L.lWrist, L.rWrist, L.lHip, L.rHip, L.lKnee, L.lAnkle];
+  assert.match(framingMessage(showing(L.lAnkle), body), /can’t see your feet.*tilt the screen down/);
+  assert.match(framingMessage(showing(L.lWrist), body), /can’t see your hands.*arms fit/);
+  assert.match(framingMessage(showing(L.lShoulder), body), /can’t see your shoulders.*tilt the screen up/);
+  assert.match(framingMessage(showing(L.lAnkle, L.lShoulder), body), /feet/, 'feet come first when several parts are out');
+  assert.match(framingMessage(showing(), body), /whole body is in view/, 'falls back to the general message');
+});

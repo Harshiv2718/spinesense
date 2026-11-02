@@ -88,6 +88,23 @@ export const frontalness = (f) => shoulderWidth(f) / Math.max(1e-6, torsoLen(f))
 
 export const allVisible = (f, idx, min = 0.5) => idx.every((i) => f.vis(i) >= min);
 
+// Body parts, checked from the feet up because the feet are what a laptop camera usually cuts off.
+const FRAME_PARTS = [
+  ['feet', [L.lAnkle, L.rAnkle, L.lHeel, L.rHeel, L.lFoot, L.rFoot], 'Step back, or tilt the screen down'],
+  ['knees', [L.lKnee, L.rKnee], 'Step back, or tilt the screen down'],
+  ['hips', [L.lHip, L.rHip], 'Step back so your whole body is in view'],
+  ['hands', [L.lWrist, L.rWrist], 'Step back so your arms fit in the picture'],
+  ['elbows', [L.lElbow, L.rElbow], 'Step back so your arms fit in the picture'],
+  ['shoulders', [L.lShoulder, L.rShoulder], 'Step back, or tilt the screen up'],
+];
+
+/** What to say when someone is partly out of frame: naming the part tells them what to change. */
+export function framingMessage(f, idx, min = 0.5) {
+  const hidden = idx.filter((i) => f.vis(i) < min);
+  const part = FRAME_PARTS.find(([, ids]) => hidden.some((i) => ids.includes(i)));
+  return part ? `I can’t see your ${part[0]}. ${part[2]}` : 'Step back so your whole body is in view';
+}
+
 export function median(arr) {
   if (!arr.length) return 0;
   const s = [...arr].sort((a, b) => a - b);

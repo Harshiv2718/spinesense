@@ -111,6 +111,11 @@ function setup(root, { demo, single, state }) {
       const level = Math.min(levels[spec.id] ?? p?.level ?? store.get().progress[spec.id]?.level ?? 0, maxLevel);
       return { id: spec.id, include: !blocked && (included[spec.id] ?? defaultInclude), level, maxLevel, repScale: demo ? 1 : p?.repScale ?? 1, reasons: p?.reasons ?? [], blocked, skipReason: skippedById[spec.id]?.reason };
     });
+    const unavailable = single && rows.find((r) => r.id === single && r.blocked);
+    if (unavailable) {
+      notesBox.append(h('div', { class: 'callout warn' }, icon('info'), h('p', { class: 'small' },
+        `${byId[single].name} isn’t in today’s plan. ${unavailable.skipReason ?? 'It’s resting today'}. Pick another exercise below, or `, h('a', { href: `#/session?ex=${single}&demo=1` }, 'watch the demo of it'), '.')));
+    }
     let lastPos = null;
     for (const row of rows) {
       const spec = byId[row.id];
@@ -461,7 +466,7 @@ class LiveSession {
       if (!this.cfg.demo) {
         if (!navigator.mediaDevices?.getUserMedia) throw Object.assign(new Error('No camera access in this browser'), { name: 'NoMediaDevices' });
         // Ask for the camera before the ~13 MB download, so a refusal doesn't waste it.
-        this.ui.loadingText.textContent = 'Waiting for camera permission…';
+        this.ui.loadingText.textContent = 'Waiting for camera permission… Your video stays on this device.';
         await this.tracker.startCamera(this.settings.cameraId);
         if (gone()) return this.tracker.stop();
       }
@@ -479,6 +484,7 @@ class LiveSession {
       console.error(e);
       this.tracker.stop();
       if (gone()) return;
+      window.__sessionLive = false; // nothing started, so leaving needs no warning
       const err = cameraError(e, stage);
       this.ui.loading.replaceChildren(h('div', { style: { maxWidth: '440px' } },
         h('h2', { style: { color: '#fff', marginBottom: '8px' } }, err.title),
@@ -492,8 +498,12 @@ class LiveSession {
     this.ui.loading.remove();
     this.setControls(true);
     if (!this.cfg.demo) {
-      const [vw, vh] = this.tracker.size;
-      this.stage.style.aspectRatio = `${vw} / ${vh}`;
+      const fit = () => {
+        const [vw, vh] = this.tracker.size;
+        this.stage.style.aspectRatio = `${vw} / ${vh}`;
+      };
+      fit();
+      this.video.addEventListener('resize', fit); // a rotated phone swaps width and height
     }
     if (this.cfg.demo && this.sensors) await this.addDemoSensors();
     if (this.rec) {
@@ -735,7 +745,10 @@ class LiveSession {
     const u = this.ui;
     const spec = this.spec;
     // centre message
-    if (st.phase !== 'active') this.message(st.message, st.settling ? 'Capturing your starting position' : spec.camera.split('.')[0]);
+    if (st.phase === 'position' && !st.settling && this.now() - this.exStart > STUCK_S) {
+      this.message(st.message, 'Can’t get in position? Press Skip to move on.');
+      this.voice.say('Can’t get in position? You can skip this exercise.', { key: 'stuck', gap: 60000 });
+    } else if (st.phase !== 'active') this.message(st.message, st.settling ? 'Capturing your starting position' : spec.camera.split('.')[0]);
     else if (!st.tracking) this.message(st.message);
     else this.message(null);
     // meter
@@ -1253,6 +1266,7 @@ function demoNote() {
 
 const SKIP_REASONS = [['couldnt-see', 'It couldn’t see me properly'], ['hurts', 'It hurts'], ['too-hard', 'Too hard'], ['unclear', 'Not sure what to do'], ['other', 'Something else']];
 const LOAD_TIMEOUT_MS = 45000;
+const STUCK_S = 20; // getting into position this long earns a hint that Skip exists
 
 /** Readable messages for the ways starting the camera or the models can fail. */
 function cameraError(e, stage) {
