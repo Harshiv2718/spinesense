@@ -15,14 +15,16 @@ export const DEFAULT_RADIO = { offset: 3.7, drift: 35, latency: 0.025, jitter: 0
 
 /**
  * cameraDelay: how late the camera's timestamps are (e.g. processing time used instead of capture time).
+ * subject: { id, seed, scale, amp, noise, hipShare(rep), pelvisShare(rep) }, a simulated person: their build and how
+ * they hinge. onFrame(frame, state): called like the live session's frame loop, after the engine has run.
  * Returns the finished clip.v1 object.
  */
-export async function simulateClip({ exercises = ['hip-hinge', 'side-bend', 'glute-bridge'], level = 1, radio = DEFAULT_RADIO, cameraDelay = 0.06, faults = {}, maxPerExercise = 120 } = {}) {
+export async function simulateClip({ exercises = ['hip-hinge', 'side-bend', 'glute-bridge'], level = 1, radio = DEFAULT_RADIO, cameraDelay = 0.06, faults = {}, maxPerExercise = 120, subject = null, onFrame = null } = {}) {
   let t = 10;
   let pose = null;
   let view = 'side';
   const hub = new SensorHub({ clock: () => t });
-  const source = (role) => (pose ? simSegmentAngles(pose, view, faults)[role] : { flex: 0, side: 0 });
+  const source = (role) => (pose ? simSegmentAngles(pose, view, subject?.pelvisShare ? { ...faults, pelvisShare: subject.pelvisShare(pose.rep) } : faults)[role] : { flex: 0, side: 0 });
   const sensors = [
     new SimSensor({ role: 'upper', source, interval: false, twist: 12, radio, seed: 11 }),
     new SimSensor({ role: 'lower', source, interval: false, twist: -18, radio: { ...radio, offset: radio.offset + 1.9, drift: -(radio.drift ?? 0) }, seed: 29 }),
@@ -34,6 +36,7 @@ export async function simulateClip({ exercises = ['hip-hinge', 'side-bend', 'glu
   hub.startRecording();
   const rec = new ClipRecorder({
     simulated: true,
+    participant: subject?.id ?? null,
     consent: { version: 1, at: new Date().toISOString(), note: 'simulated data, no person involved' },
     capture: { source: 'simulated', tasksVersion: 'simulated', poseModel: 'SimPerson', poseDelegate: 'none', aspect: SIM_ASPECT, videoSize: [1280, 720], cameraDelay },
     plan: exercises.map((id) => `${id}@${level}`),
@@ -44,7 +47,7 @@ export async function simulateClip({ exercises = ['hip-hinge', 'side-bend', 'glu
   for (const id of exercises) {
     const spec = byId[id];
     view = spec.view;
-    const person = new SimPerson(id, { kind: spec.kind, hold: spec.levels[level].hold ?? 3, view });
+    const person = new SimPerson(id, { kind: spec.kind, hold: spec.levels[level].hold ?? 3, view, ...(subject ? { seed: subject.seed, scale: subject.scale, amp: subject.amp, noise: subject.noise, hipShare: subject.hipShare } : {}) });
     const run = new ExerciseRun(spec, level);
     const smooth = new LandmarkSmoother();
     const smoothW = new LandmarkSmoother();
@@ -59,6 +62,7 @@ export async function simulateClip({ exercises = ['hip-hinge', 'side-bend', 'glu
       f.sensors = hub.snapshot(t);
       const st = run.update(f);
       for (const ev of st.events) if (ev.type !== 'hold-tick' && ev.type !== 'rep-start') rec.addEvent(t, id, ev);
+      onFrame?.(f, st);
       rec.addFrame({ t: t + cameraDelay, tCapture: t + cameraDelay, raw: { lm: fr.lm, world: fr.world } }, { ex: id, level, phase: st.phase, rep: st.reps, state: st.repState });
     }
     results.push(run.summary());

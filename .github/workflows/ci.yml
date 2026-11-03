@@ -32,6 +32,32 @@ jobs:
       - run: node tools/check-models.mjs
       - run: node tools/build-site.mjs _site
 
+  ml:
+    name: ML pipeline (simulated people)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: pip install -r ml/requirements.txt
+      - run: python -m pytest -q ml
+      - name: Train on simulated people
+        run: |
+          node tools/build-dataset.mjs --simulate 16 --out ml/data/sim.jsonl
+          python ml/train.py ml/data/sim.jsonl --out ml/artifacts/sim
+      - name: A simulated model must be refused
+        run: |
+          if node tools/ship-model.mjs ml/artifacts/sim; then echo 'Shipped a simulated model'; exit 1; fi
+      - name: The negative control must fail the gate
+        run: |
+          node tools/build-dataset.mjs --simulate 16 --no-cue --out ml/data/nocue.jsonl
+          python ml/train.py ml/data/nocue.jsonl --out ml/artifacts/nocue | tee nocue.txt
+          grep -q "doesn't clearly beat" nocue.txt
+
   firmware:
     name: Firmware compiles (${{ matrix.board }})
     runs-on: ubuntu-latest

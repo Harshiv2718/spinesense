@@ -55,7 +55,7 @@ test('every relative import in the app resolves to a real file', async () => {
 
 test('safety boundary: safety code never depends on learned models or the LLM layer', async () => {
   // docs/architecture.md §10: models and explanations may advise, never decide.
-  const safetyRoots = ['js/program.js', 'js/views/safety.js'].map((p) => join(ROOT, p));
+  const safetyRoots = ['js/program.js', 'js/views/safety.js', 'js/core/engine.js', 'js/core/discomfort.js'].map((p) => join(ROOT, p));
   const seen = new Set();
   const stack = [...safetyRoots];
   while (stack.length) {
@@ -68,6 +68,15 @@ test('safety boundary: safety code never depends on learned models or the LLM la
   assert.deepEqual(forbidden, []);
 });
 
+test('claims vocabulary: nothing says the app detects pain or diagnoses', async () => {
+  // docs/architecture.md §10: these words would make it a medical device.
+  const banned = /detects pain|diagnoses|identifies your condition|\btreats\b|clinically validated/i;
+  const files = ['README.md', 'index.html', 'phone.html', 'ml/train.py', ...(await jsFiles(join(ROOT, 'js'))).map((f) => relative(ROOT, f))];
+  const hits = [];
+  for (const f of files) if (banned.test(await readFile(join(ROOT, f), 'utf8'))) hits.push(f);
+  assert.deepEqual(hits, []);
+});
+
 test('model licence gate: unlisted files, tier C and tier B without permission all fail', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'spinesense-models-'));
   try {
@@ -78,7 +87,7 @@ test('model licence gate: unlisted files, tier C and tier B without permission a
     const sha256 = createHash('sha256').update(bytes).digest('hex');
     const write = (models) => writeFile(join(dir, 'manifest.json'), JSON.stringify({ schema: 1, models }));
 
-    await write([{ id: 'q', file: 'quality.onnx', sha256, licenceTier: 'A' }]);
+    await write([{ id: 'q', file: 'quality.onnx', sha256, licenceTier: 'A', status: 'off' }]);
     assert.equal((await checkModels(dir)).ok, true);
 
     await write([{ id: 'q', file: 'quality.onnx', sha256, licenceTier: 'B' }]);

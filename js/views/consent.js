@@ -6,6 +6,12 @@ import { deleteAllClips } from '../data/clipstore.js';
 
 export const CLIP_CONSENT_VERSION = 1;
 
+/** A random id for this browser. Training must keep each person's clips together, and it says nothing about who they are. */
+export function participantId() {
+  if (!store.get().participant) store.update((s) => { s.participant = crypto.randomUUID(); });
+  return store.get().participant;
+}
+
 export function clipConsent() {
   const c = store.get().consent?.clips;
   return c?.version === CLIP_CONSENT_VERSION ? c : null;

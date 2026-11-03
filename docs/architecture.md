@@ -35,7 +35,7 @@ The target pipeline for SpineSense: what runs where, how data flows, how models 
 │                 records · IndexedDB clip library (Recordings page)                               │
 └────────│─────────────────────────────────────────────────────────────────────────────────────────┘
          │ clips (consented, user-exported)
-┌────────▼─ OFFLINE ML PIPELINE (Python, ml/) ──────────────────────────────────────────── [Next] ─┐
+┌────────▼─ OFFLINE ML PIPELINE (Python, ml/) ────────── [Built, simulated data; real clips Next] ─┐
 │ public RGB datasets ─► re-extract MediaPipe (pinned) ──┐                                         │
 │ own clips ─► raw browser landmarks (pre-filter) ───────┴─► same One-Euro filter ─► normalise     │
 │ ─► windows ─► train (rules baseline → trees → 1D-CNN if trees plateau) ─► leave-one-subject-out  │
@@ -58,16 +58,25 @@ The target pipeline for SpineSense: what runs where, how data flows, how models 
 | 2 | Camera-to-IMU time alignment | `js/sensors/timesync.js`, `tracker.js`, `hub.js` | Built (simulator-tested) | Lower-envelope clock fit (as in NTP-style one-way sync); cross-correlation |
 | 3 | Calibration | engine baseline, `discomfort.js`, `sensors/posture.js` | Built | Clinical dual-inclinometer method |
 | 4 | Angle features | `js/core/geometry.js` | Built | **Sports2D** segment angles, plane-of-motion warnings |
+| 4 | Per-rep features for models (one definition for training and browser) | `js/core/features.js` | Built | Exercise-Correction style engineered angles |
 | 4 | Velocity and jerk features | `js/core/features.js` | Next | — |
 | 5 | Rep segmentation and counting | `js/core/engine.js` | Built (rules) | **PoseRAC**, **Exercise_Recognition_AI**; a model only if rules fail on recorded clips |
 | 5 | Movement-quality scoring | `js/ml/quality.js` + `models/*.onnx` | Next | **avakanski** framework; **EGCN**, **RehabExerAssess**; Rehab-Pile (LITEMV) |
 | 5 | Form-error classifiers | `js/ml/errors.js` | Next | **Exercise-Correction** |
+| 5 | Shadow-mode model runner | `js/ml/{bank,trees}.js` | Built (no model shipped yet) | — |
 | 5 | Discomfort fusion | `js/core/discomfort.js` | Built | EmoPain protective-behaviour taxonomy |
 | 6 | Safety gates and progression | `js/program.js`, session check-ins | Built | NICE / UK cauda equina pathway |
 
 **Models plug in without risk:** each runs in **shadow mode** first, next to the rule-based prediction, with disagreement counters kept on the device (§11). It is promoted only after passing acceptance gates on held-out people, and even then it changes *cues and scores*, never safety decisions (§10).
 
 ## 4. Offline ML pipeline (`ml/`, Python)
+
+**Status:** own-clip path built and tested on simulated people; no real model exists. How to run it: `ml/README.md`.
+
+- **Built:** steps 2b, 3 (as gravity-referenced, torso-scaled per-rep features), 4 (per-rep windows), 5a and 5b (baselines, trees), 6 (leave-one-person-out with intervals over people), 7 (trees as JSON, run by `js/ml/trees.js`), 8–9 (model card, manifest, gate, shadow mode).
+- **Changed from the plan:** features run from one JS file in Node and the browser instead of a Python port of the filters, so there is nothing to keep in parity for own clips. Trees need no ONNX, WASM or Worker. The 64-frame resampling waits for a neural network, if one is ever justified.
+- **Next:** steps 1, 2a and 2c (public datasets, Python MediaPipe), 5c (1D-CNN, only if trees plateau).
+- **Blocked on hardware:** the real model needs 15 people with two sensors. A phone can't supply the lumbar label.
 
 | Step | Detail |
 |---|---|
@@ -94,7 +103,7 @@ The target pipeline for SpineSense: what runs where, how data flows, how models 
 
 Tier A is thin: its Kinect sets are skeleton-only and none covers hip hinge, bridge, bird dog, knee-to-chest or side bend; only VIDIMU has RGB. A shippable back-exercise model realistically comes from your own consented clips.
 
-**Model versioning and rollback** (Next). A model trained on tier B or C data is a derived work, and publishing it through Pages is shipping, so code enforces the tier:
+**Model versioning and rollback** (Built, no model shipped yet; `tools/ship-model.mjs`, `js/ml/bank.js`; files are trees as JSON rather than ONNX). A model trained on tier B or C data is a derived work, and publishing it through Pages is shipping, so code enforces the tier:
 
 - `models/manifest.json`: `{schema, featureSchema, minApp, models:[{id, version, file (hashed), sha256, licenceTier, permission, poseModelSha256, status: shadow|beta|on|off, previous}]}`. The app refuses a model whose `featureSchema` differs from `js/core/features.js`. `tools/check-models.mjs` (in CI) fails if a file in `models/` is missing from the manifest, or has a tier other than 'A' without a non-null `permission`. `ml/artifacts/` and landmarks from tier B/C data are git-ignored.
 - Load and rollback: fetch the manifest with no-cache and the model by hashed name, then verify SHA-256. On any failure (network, hash, ORT load, NaN output, 20 consecutive slow windows) set `bank = null` for the session and log why locally. To roll back, set `status:'off'` or point to `previous` and redeploy (≤ 10 minutes); keep the last two versions. "Use experimental models" is off until beta; promotion goes shadow → beta → on, one cue type at a time.
@@ -115,14 +124,14 @@ Tier A is thin: its Kinect sets are skeleton-only and none covers hip hinge, bri
 | `spinesense.v1` | Profile, safety check, progress, sessions, settings | **Stays in localStorage** (Built): seven modules use the synchronous `store`, and `index.html` reads the theme before first paint. Open tabs stay in step through the `storage` event, a failed save warns once, and the browser is asked to keep the data (all Built). Next: `migrate(state)` keyed on `version` in `load()` and `importJSON()` (neither checks it today; reject newer versions) |
 | `spinesense.sensorcal` | Per-sensor calibration, 12-hour expiry | localStorage (Built) |
 | Training clips | `clip.v1`: `{schema, consent:{version, at, scope[]}, participant:<random UUID>, env:{app, tasksVision, poseModelSha256, variant, delegate, camera:{w,h,fps}, ua}, sensors:[{role, fw, board, rate, calId}], sync:{offsetMs, corr, method}, frames:[{tCapture, lm33_raw, world33_raw, sensorRaw?}]}` | IndexedDB library, `js/data/{clip,clipstore}.js` (Built): `clip.v1` with a consent record, capture metadata (MediaPipe version, model, delegate, video size), raw and world landmarks as typed arrays, raw sensor packets with device and arrival times, events and results; 10-minute cap; quota errors fall back to download. Still Next: participant UUID, `navigator.storage.persist()`, and keeping pain answers out of clips meant for sharing. A 10-minute clip at 30 fps is about 15–20 MB as JSON |
-| Models | ONNX files + manifest | Static files with the app (Next) |
+| Models | Trees as JSON + manifest | Static files with the app (Built; the manifest is empty until a model passes the gate) |
 
 **Clip consent flow** (Built for on-device recording: `js/views/consent.js`, versioned, asked the first time recording is switched on, withdrawable on the Recordings page, which deletes every clip. The research-sharing and open-release boxes are Next, because nothing is shared yet.) Before the first clip and on any schema change: A plain-language screen says what is stored (33 landmarks at 30 Hz, sensor angles, exercise, time; no video), that movement traces can still identify a person, who sees them, retention (12 months) and how to withdraw. Three separate boxes: record on this device; share for research; allow anonymised open release (default off). Names, screening answers and pain ratings never enter a clip. The library offers Export and Delete; with no server, participants send exports to a private channel, and `docs/data-handling.md` states retention. Only pain-free volunteers, or people with back pain doing correct-form reps under a physio, may record; publishing results about people with back pain needs an ethics review through a university or clinic partner.
 
 ## 7. Hardware pipeline
 
 - **Status: Unverified.** The firmware (one sketch, two boards: M5StickC Plus2; ESP32 + MPU6050) **compiles in CI for both boards** (first green run 2026-10-26, ESP32 core 3.3.12, M5Unified 0.2.27), but has not been run on hardware, and its hand-rolled Madgwick filter has never been compared with a proven one. Phase 1 exit criterion: both boards compile in CI (**met**), and one board streams 10 minutes into the app with no sequence-number gaps (open).
-- **CI** (Next): a `firmware` matrix over both boards, pinning one `esp32:esp32` core and one `M5Unified`. The sketch hard-codes `#define BOARD_M5STICKC_PLUS2` (line 15), so guard it with `#if !defined(...)` and pass `-DBOARD_ESP32_MPU6050` through `--build-property` on the second leg; confirm each FQBN with `arduino-cli board listall`. Attach `.bin` files to tagged releases (the SlimeVR-Tracker-ESP pattern). A green build proves compilation only.
+- **CI** (Built): a `firmware` matrix over both boards, pinning one `esp32:esp32` core and one `M5Unified`. The sketch hard-codes `#define BOARD_M5STICKC_PLUS2` (line 15), so guard it with `#if !defined(...)` and pass `-DBOARD_ESP32_MPU6050` through `--build-property` on the second leg; confirm each FQBN with `arduino-cli board listall`. Attach `.bin` files to tagged releases (the SlimeVR-Tracker-ESP pattern). A green build proves compilation only.
 - **Protocol:** the version sits in the packet header (bits 4–7) and is decoded, but unknown versions are **not rejected yet (Next)**. Add `proto=1` to the Info string; `BleSensor.connect()` reads Info first and, if `proto` is missing or above `PROTOCOL_VERSION`, shows "This sensor needs a newer SpineSense" and does not subscribe.
 
 ## 8. Target repository layout
@@ -131,14 +140,14 @@ Tier A is thin: its Kinect sets are skeleton-only and none covers hip hinge, bri
 spinesense/
 ├── index.html, phone.html, css/, js/   # the web app and the phone sensor page (static, no build step)
 │   ├── app.js, store.js, program.js, ui.js, charts.js, figures.js
-│   ├── core/ sensors/ vision/ coach/   # logic (features.js: Next), BLE + hub + timesync, MediaPipe, voice
+│   ├── core/ sensors/ vision/ coach/   # logic + features.js, BLE + hub + timesync, MediaPipe, voice
 │   ├── data/ analysis/            # clip.v1 recorder + IndexedDB library; agreement stats, plots, bench, simulator
-│   ├── ml/                        # onnxruntime-web loaders, shadow-mode harness            (Next)
+│   ├── ml/                        # tree runner, shadow-mode model bank
 │   └── views/                     # incl. diagnostics.js (tracking panel + copyable test report)
 ├── server.mjs                     # dev server (the camera needs localhost or HTTPS)
-├── models/, ml/, tools/           # *.onnx + manifest (Next); Python pipeline (Next); build-site, check-models, validate-clips
+├── models/, ml/, tools/           # manifest + models; training; build-site, check-models, validate-clips, build-dataset, ship-model
 ├── firmware/spinesense-motion/    # ESP32 firmware (compiles in CI; not yet run on hardware)
-├── test/                          # node --test (83 tests today)
+├── test/                          # node --test (95 tests today)
 ├── docs/                          # architecture, hardware, sensor-protocol, platform-brainstorm,
 │                                  #   validation (+ plots), testing; hazards, data-handling (Next)
 ├── reports/, research_notes/      # research report, evidence base
@@ -151,7 +160,7 @@ spinesense/
 | Workflow | Runs |
 |---|---|
 | `ci.yml` (Built, green) | One workflow, three jobs until `ml/` has tests: `test` (`node --test`, including the §10 import-boundary test in `test/release.test.mjs`), `firmware` (§7; both boards via a matrix, ESP32 core 3.3.12, M5Unified 0.2.27, arduino-cli 1.5.1), `site` (build the allowlist, run `tools/check-models.mjs`). Add `pytest ml/` once `ml/` has tests. No Prettier ("no dependencies" is a selling point); ESLint is optional via `npx` |
-| `pages.yml` (Written, first run pending) | `tools/build-site.mjs` copies an allowlist (`index.html css js docs models`; `docs/` because the Sensors page links the hardware guide) to `_site/`, refuses deny-listed paths, and deploys only that, never the repo root (which would publish `research_notes/`, `reports/`, `.claude/`, `test/`, `firmware/`). Pages gives no custom headers (CSP stays in `index.html`; no cross-origin isolation), a 10-minute cache (so models use hashed names and the manifest is fetched with `cache: 'no-cache'`) and no server logs. HTTPS makes camera and Web Bluetooth work, giving a **live demo link**; the page says Web Bluetooth is Chrome/Edge only. Lighthouse and axe-core on each deploy: Next |
+| `pages.yml` (Built, green) | `tools/build-site.mjs` copies an allowlist (`index.html css js docs models`; `docs/` because the Sensors page links the hardware guide) to `_site/`, refuses deny-listed paths, and deploys only that, never the repo root (which would publish `research_notes/`, `reports/`, `.claude/`, `test/`, `firmware/`). Pages gives no custom headers (CSP stays in `index.html`; no cross-origin isolation), a 10-minute cache (so models use hashed names and the manifest is fetched with `cache: 'no-cache'`) and no server logs. HTTPS makes camera and Web Bluetooth work, giving a **live demo link**; the page says Web Bluetooth is Chrome/Edge only. Lighthouse and axe-core on each deploy: Next |
 
 ## 10. Safety, privacy and regulatory guardrails (Next unless marked)
 
@@ -175,7 +184,9 @@ spinesense/
 | **2. Measure** | Time alignment; clip recorder v1 with consent flow and IndexedDB library; reference validation; camera-vs-sensor study | `docs/validation.md` with Bland–Altman plots and the sensor's own error |
 | **3. Learn** | `ml/` pipeline; first model (hip-hinge lumbar estimation from camera, labelled by the sensor) in shadow mode | Model card plus "camera-only lumbar flexion within X° (95% CI, n = …)", or the agreement analysis if n < 15 |
 
-**User-test round (current, between phases 2 and 3).** Testers use the live demo with no hardware. See `docs/testing.md`.
+**Phase 3 status.** The pipeline, ship gate and shadow mode are built and run in CI on simulated people, including a negative control that must fail the gate. The first real model waits for two sensors and 15 people; until then the portfolio proof is the agreement analysis, as §4 says.
+
+**User-test round (current).** Testers use the live demo with no hardware. See `docs/testing.md`.
 
 - Bluetooth screens stay in the code but are hidden until `settings.hardwareSensors` is turned on in Settings. Turn it on when the hardware arrives.
 - `TEST_ROUND` in `js/program.js` sends anyone with a see-a-doctor sign or a caution to the demo and switches off self-clearance. Set it to `false` when the round ends.

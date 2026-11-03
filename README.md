@@ -21,7 +21,7 @@ Then open http://localhost:5173 and allow camera access. Browsers only allow the
 
 No webcam handy? **Demo (no camera)** on the dashboard runs a simulated person through the exercises. Use **Simulate pain on next rep** to watch the discomfort detection respond.
 
-Run the tests with `npm test` (83 tests: exercise engine, discomfort detector, safety rules, sensor maths, time alignment, clip format, agreement statistics, the phone sensor, storage, test-report privacy, and the release checks).
+Run the tests with `npm test` (95 tests: exercise engine, discomfort detector, safety rules, sensor maths, time alignment, clip format, agreement statistics, the phone sensor, storage, test-report privacy, the model pipeline, and the release checks).
 
 ## Help test it
 
@@ -69,7 +69,8 @@ Webcam ─┬─ MediaPipe Pose (33 body points, 3D) ─► One-Euro smoothing �
 | `js/data/`, `js/analysis/` | Clip format and IndexedDB library; camera-vs-sensor agreement statistics, Bland–Altman plots, bench test, clip simulator |
 | `firmware/` | ESP32 firmware (M5StickC Plus2 or ESP32 + MPU6050): fusion + BLE streaming |
 | `js/views/` | Dashboard, live session, exercise library, history, sensors, recordings, safety check, settings |
-| `tools/` | Site build (allowlist), model licence gate, validation report generator |
+| `js/ml/`, `ml/`, `models/` | Shadow-mode model runner; training pipeline; shipped models and their manifest |
+| `tools/` | Site build (allowlist), model licence gate, validation report, training dataset builder, model shipping |
 | `phone.html`, `js/phone.js` | Phone sensor page: guided calibration, recording, and sending the file to the computer |
 
 ### Back sensors (optional)
@@ -94,6 +95,15 @@ Try it without hardware: the demo session wears simulated sensors (try **Simulat
 3. **Compare** the camera's trunk angle with the sensor, exercise by exercise: bias, Bland–Altman limits of agreement, ICC and concordance.
 
 The Recordings page runs the same analysis on any clip and draws the plots. `node tools/validate-clips.mjs clip.json …` regenerates the results page from exported clips. Until real hardware recordings exist, the published numbers come from a **simulated** session: they prove the pipeline works, not that the camera is accurate.
+
+### Learning from real data (Phase 3)
+
+The first model estimates how much the lower back flexed during a hip hinge, from the webcam alone, with two back sensors as the answer key. **No real model exists yet:** it needs at least 15 people wearing two sensors. The whole pipeline is built and tested on simulated people, so real clips can go straight in. See [ml/README.md](ml/README.md).
+
+- Features are defined once (`js/core/features.js`) and run in both training and the browser.
+- Every score comes from people the model never saw, compared with simple baselines, with intervals over people.
+- A gate refuses simulated data, too few people, restricted data, or anything that doesn't clearly beat the baselines. As a negative control, a model given nothing to learn fails it.
+- A model that passes starts in shadow mode: it logs numbers on the device and changes nothing the user sees. It can't reach the safety rules.
 
 ### Exercises
 

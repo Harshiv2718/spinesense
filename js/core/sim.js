@@ -114,7 +114,7 @@ function anchor(pts, floorIdx, xi, x) {
 const ease = (p) => p * p * (3 - 2 * p);
 
 /** Skeleton for an exercise at progress p (0 = start position, 1 = full range). */
-export function poseAt(exId, p, { limb = 'left' } = {}) {
+export function poseAt(exId, p, { limb = 'left', hipShare = null } = {}) {
   const other = limb === 'left' ? 'right' : 'left';
   let pts;
   switch (exId) {
@@ -127,7 +127,8 @@ export function poseAt(exId, p, { limb = 'left' } = {}) {
       pts = anchor(pts, [27, 28, 31, 32], 23, CX + SEG.hipHalf);
       break;
     case 'hip-hinge': {
-      const leg = { armU: 0, thigh: 15 * p, shin: 0, foot: 90 };
+      // hipShare: how much of the bend comes from the hips. More hip means the hips travel further back.
+      const leg = { armU: 0, thigh: 30 * (hipShare ?? 0.5) * p, shin: 0, foot: 90 };
       pts = sideSkeleton({ hip: { x: CX, y: 0.5 }, trunk: 180 - 60 * p, limbs: { left: leg, right: leg } });
       pts = anchor(pts, [28, 30], 28, CX + 0.05);
       break;
@@ -191,8 +192,8 @@ function rng(seed) {
  * opts.painFrom: from this rep on, range shrinks and the face grimaces (to demo pain detection).
  */
 export class SimPerson {
-  constructor(exId, { kind = 'reps', hold = 3, painFrom = Infinity, view = 'side', seed = 7, noise = 0.0015, amp = 1 } = {}) {
-    Object.assign(this, { exId, kind, hold, painFrom, view, noise, amp });
+  constructor(exId, { kind = 'reps', hold = 3, painFrom = Infinity, view = 'side', seed = 7, noise = 0.0015, amp = 1, scale = 1, hipShare = null } = {}) {
+    Object.assign(this, { exId, kind, hold, painFrom, view, noise, amp, scale, hipShare });
     this.rand = rng(seed);
     this.lead = 2.2;
   }
@@ -225,11 +226,12 @@ export class SimPerson {
     const hurting = k >= this.painFrom;
     const amp = hurting ? 0.62 * this.amp : this.amp;
     const limb = k % 2 === 1 ? 'right' : 'left';
-    const pose = poseAt(this.exId, p * amp, { limb });
+    const pose = poseAt(this.exId, p * amp, { limb, hipShare: this.hipShare?.(k) });
     const n = () => (this.rand() - 0.5) * 2 * this.noise;
     for (const q of pose.lm) {
-      q.x += n();
-      q.y += n();
+      // Taller or shorter people stand on the same floor.
+      q.x = CX + (q.x - CX) * this.scale + n();
+      q.y = FLOOR + (q.y - FLOOR) * this.scale + n();
     }
     const grimace = 0.3 + n() * 10 + (hurting && p > 0.4 ? 0.9 : 0);
     return { ...pose, t, face: { score: grimace, frontal: this.view === 'front' }, rep: k, p };

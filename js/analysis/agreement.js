@@ -16,18 +16,21 @@ import { frameLandmarks } from '../data/clip.js';
 
 const SENSOR_COLS = { role: 0, rx: 1, dev: 2, tl: 3, q: 4, a: 8 };
 
-/** Camera trunk angles per frame, re-smoothed exactly like the live app does. */
-export function cameraSeries(clip) {
+/** The clip's frames, re-smoothed exactly like the live app does. */
+export function cameraFrames(clip) {
   const aspect = clip.capture?.aspect ?? 16 / 9;
   const smooth = new LandmarkSmoother();
   const smoothW = new LandmarkSmoother();
   return clip.frames.rows.map((row, i) => {
     const t = row[0];
     const { lm, world } = frameLandmarks(clip, i);
-    const f = makeFrame(smooth.apply(lm, t), world ? smoothW.apply(world, t) : null, aspect, t);
-    const raw = makeFrame(lm, world, aspect, t);
-    return { t, ex: row[2], phase: row[4], rep: row[5], state: row[6], tilt: trunkTilt(f), lean: lateralTilt(f), tiltRaw: trunkTilt(raw) };
+    return { t, ex: row[2], phase: row[4], rep: row[5], state: row[6], frame: makeFrame(smooth.apply(lm, t), world ? smoothW.apply(world, t) : null, aspect, t), raw: makeFrame(lm, world, aspect, t) };
   });
+}
+
+/** Camera trunk angles per frame. */
+export function cameraSeries(clip) {
+  return cameraFrames(clip).map(({ frame, raw, ...c }) => ({ ...c, tilt: trunkTilt(frame), lean: lateralTilt(frame), tiltRaw: trunkTilt(raw) }));
 }
 
 /** Sensor angles over time for one body position, on the browser clock (offline clock fit). */
@@ -147,5 +150,5 @@ export function analyzeClip(clip, { role = 'upper', lagOverride = null } = {}) {
       repPairs,
     };
   }
-  return { ok: true, lag: sync, smoothingDelay, perExercise };
+  return { ok: true, lag: sync, smoothingDelay, align, perExercise };
 }

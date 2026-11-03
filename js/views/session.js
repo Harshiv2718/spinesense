@@ -16,8 +16,10 @@ import { SimSensor, simCalibration, simSegmentAngles } from '../sensors/sim.js';
 import { openCalibrationModal, downloadClip } from './sensors.js';
 import { ClipRecorder } from '../data/clip.js';
 import { saveClip } from '../data/clipstore.js';
-import { clipConsent, askClipConsent, testConsent, askTestConsent } from './consent.js';
+import { clipConsent, askClipConsent, testConsent, askTestConsent, participantId } from './consent.js';
 import { DEFAULT_RADIO } from '../analysis/simclip.js';
+import { RepWindow, FEATURE_EXERCISE } from '../core/features.js';
+import { ModelBank } from '../ml/bank.js';
 
 const DEMO_DEFAULT = new Set(['side-bend', 'hip-hinge', 'glute-bridge']);
 
@@ -302,6 +304,11 @@ class LiveSession {
     this.lastText = new Map();
     this.diag = new Diagnostics({ demo: !!cfg.demo, model: this.settings.modelVariant, sensitivity: this.settings.sensitivity, face: cfg.face, plan: cfg.items.map((i) => `${i.id}@${i.level}`) });
     this.diag.results = () => this.results;
+    // Models only ever run in shadow mode here: logged as numbers, never shown, never near safety.
+    this.bank = new ModelBank();
+    this.bank.load();
+    this.diag.shadow = () => this.bank.stats();
+    this.repWindow = new RepWindow();
     // Real sessions use the app-wide sensor hub; the demo gets its own simulated pair.
     this.sensors = cfg.demo ? (cfg.simSensors ? new SensorHub({ clock: () => this.now() }) : null) : this.settings.hardwareSensors ? hub : null;
     // The Sensors page's "Try simulated sensors" must not feed made-up angles into a real session.
@@ -310,7 +317,7 @@ class LiveSession {
       toast('Simulated sensors disconnected: a real session only uses real sensors.');
     }
     this.faults = {};
-    this.rec = cfg.record ? new ClipRecorder({ consent: clipConsent(), plan: cfg.items.map((i) => `${i.id}@${i.level}`), simulated: !!cfg.demo }) : null;
+    this.rec = cfg.record ? new ClipRecorder({ consent: clipConsent(), plan: cfg.items.map((i) => `${i.id}@${i.level}`), simulated: !!cfg.demo, participant: participantId() }) : null;
     this.build();
     this.tracker = cfg.demo ? new SimTracker() : new CameraTracker({ video: this.video, variant: this.settings.modelVariant, face: cfg.face });
     window.__sessionLive = true;
@@ -600,6 +607,8 @@ class LiveSession {
     this.spec = spec;
     this.run = new ExerciseRun(spec, it.level, { repScale: it.repScale });
     this.events = [];
+    this.repWindow = new RepWindow();
+    this.repLumbar = null;
     this.exStart = this.now();
     this.det.resetExercise();
     this.mode = 'exercise';
@@ -654,6 +663,7 @@ class LiveSession {
     if (this.spec.gesturePause && this.run.phase === 'active' && this.handRaised(f, t)) return this.pause('Hand raised');
 
     const st = this.run.update(f);
+    if (this.spec.id === FEATURE_EXERCISE) this.shadow(f, st);
     if (fr.face && this.cfg.face) this.det.pushFace(fr.face.score, t, fr.face.frontal, fr.face.eyes);
     for (const ev of st.events) {
       this.det.onEvent(ev, st);
@@ -698,6 +708,18 @@ class LiveSession {
     }
     this.handSince = null;
     return false;
+  }
+
+  /** Hands each finished rep to any shadow model. Same windows as js/analysis/dataset.js uses for training. */
+  shadow(f, st) {
+    if (st.events.some((e) => e.type === 'rep')) {
+      this.bank.observe(this.repWindow.take(), { sensorLumbar: this.repLumbar });
+      this.repLumbar = null;
+    }
+    if (st.phase !== 'active') return;
+    this.repWindow.push(f);
+    const base = this.run.sbase?.lumbarFlex;
+    if (f.sensors?.lumbar && base != null) this.repLumbar = Math.max(this.repLumbar ?? -Infinity, f.sensors.lumbar.flex - base);
   }
 
   handleEvent(ev, st) {

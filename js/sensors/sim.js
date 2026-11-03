@@ -115,6 +115,6 @@ export function simSegmentAngles(frame, view, faults = {}) {
   // Side view: the simulated person faces image-right, so shoulders ahead of hips = forward flexion.
   const flex = trunkTilt(f) * (Math.sign(sh.x - hp.x) || 1);
   const standing = Math.abs(flex) < 70;
-  const pelvisShare = standing ? (faults.round ? 0.3 : 0.7) : 1;
+  const pelvisShare = standing ? faults.pelvisShare ?? (faults.round ? 0.3 : 0.7) : 1;
   return { upper: { flex, side: 0 }, lower: { flex: flex * pelvisShare + (faults.arch && !standing ? 14 : 0), side: 0 } };
 }

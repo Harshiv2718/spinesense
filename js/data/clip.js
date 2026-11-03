@@ -3,6 +3,7 @@
 //
 // {
 //   schema: 'clip.v1', id, createdAt, app, simulated,
+//   participant,                                  // random id for this browser, so clips can be grouped by person
 //   consent: { version, at },                     // the user's recording consent at the time
 //   capture: { source, tasksVersion, poseModel, poseDelegate, aspect, videoSize },
 //   clock: { perfS, epochMs },                   // the same moment on both clocks, for lining up other devices
@@ -24,13 +25,14 @@ export const FRAME_COLUMNS = ['tCap_s', 'tProc_s', 'exercise', 'level', 'phase',
 const r = (v, k = 4) => (v == null ? null : +v.toFixed(k));
 
 export class ClipRecorder {
-  constructor({ capture, consent, plan, app = { name: 'SpineSense', version: VERSION }, simulated = false } = {}) {
+  constructor({ capture, consent, plan, app = { name: 'SpineSense', version: VERSION }, simulated = false, participant = null } = {}) {
     this.clip = {
       schema: CLIP_SCHEMA,
       id: `clip-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
       createdAt: new Date().toISOString(),
       app,
       simulated,
+      participant,
       consent: consent ?? null,
       capture: capture ?? {},
       // Frame times use the performance clock; this ties it to wall-clock time so a phone recording can be lined up.

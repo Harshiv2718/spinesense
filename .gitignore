@@ -12,6 +12,9 @@ active/
 # Future ML pipeline: artifacts and landmarks derived from licence-restricted (tier B/C) data
 ml/artifacts/
 ml/data/
+ml/.venv/
+ml/__pycache__/
+ml/.pytest_cache/
 
 # Training clips and raw sensor recordings contain personal movement data
 spinesense-clip-*.json

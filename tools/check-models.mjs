@@ -9,9 +9,11 @@ import { readFile, readdir, stat } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { FEATURE_SCHEMA } from '../js/core/features.js';
 
 const ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const TIERS = ['A', 'B', 'C'];
+const STATUSES = ['shadow', 'beta', 'on', 'off'];
 
 export async function checkModels(dir = join(ROOT, 'models')) {
   if (!(await stat(dir).catch(() => null))) return { ok: true, problems: [], note: 'no models/ folder yet' };
@@ -32,6 +34,9 @@ export async function checkModels(dir = join(ROOT, 'models')) {
   for (const m of manifest.models ?? []) {
     const where = `model ${m.id ?? m.file}`;
     if (!TIERS.includes(m.licenceTier)) problems.push(`${where}: licenceTier must be A, B or C`);
+    if (m.simulated) problems.push(`${where}: trained on simulated data, which can never ship`);
+    if (!STATUSES.includes(m.status)) problems.push(`${where}: status must be one of ${STATUSES.join(', ')}`);
+    if (m.status !== 'off' && m.featureSchema !== FEATURE_SCHEMA) problems.push(`${where}: built for feature schema ${m.featureSchema}, the app uses ${FEATURE_SCHEMA}`);
     if (m.licenceTier === 'C') problems.push(`${where}: tier C data is validation-only and can never ship`);
     if (m.licenceTier === 'B' && !m.permission) problems.push(`${where}: tier B needs written permission recorded in "permission"`);
     if (!files.includes(m.file)) problems.push(`${where}: file ${m.file} not found`);

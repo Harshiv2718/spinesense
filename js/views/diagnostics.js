@@ -103,6 +103,7 @@ export class Diagnostics {
       results: (results ?? []).filter(Boolean).map((r) => ({ id: r.id, reps: `${r.reps}/${r.targetReps}`, aborts: r.aborts, form: r.formScore, best: r.peakBest, skipped: r.skipped ? r.skipReason ?? true : false })),
       // Rep durations include pauses and check-ins, which would hint at pain: leave them out.
       events: this.events.filter((e) => !privateEvent(e.type)).map(({ dur, ...e }) => e),
+      shadowModel: this.shadow?.() ?? null,
       columns: keep.map((i) => COLS[i]),
       samples: this.samples.map((row) => keep.map((i) => row[i])),
     });
